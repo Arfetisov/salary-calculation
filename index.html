@@ -6,13 +6,50 @@
     <title>Калькулятор зарплаты</title>
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
-        const XLSX = window.XLSX;
+        
+        // === ДАННЫЕ ===
+        const MANAGER_PIN = '1234';
+        const COMPANY_NAME = 'Омега Дизайн';
+        
+        const OPS = [
+          { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.' },
+          { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', hasComplexity: true },
+          { id: 'lift', name: 'Подъём на лифте', unit: 'подъём' },
+          { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт' },
+          { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт' },
+          { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт' },
+          { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.' },
+          { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.' },
+          { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт' },
+          { id: 'assembly', name: 'Сборка фасада', unit: 'шт', hasSize: true },
+          { id: 'qc', name: 'Контроль качества', unit: 'шт' },
+          { id: 'packing', name: 'Упаковка', unit: 'шт' },
+          { id: 'shipping', name: 'Отгрузка', unit: 'компл.' },
+        ];
+        
+        const DEFAULT_RATES = {
+          unload: { rate: 50 },
+          glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
+          lift: { rate: 40 },
+          profile_cut: { rate: 100 },
+          milling: { rate: 120 },
+          drilling_profile: { rate: 90 },
+          drilling_glass: { rate: 50 },
+          cleaning: { rate: 60 },
+          sealant: { rate: 70 },
+          assembly: { sizes: { small: 180, medium: 230, large: 290 } },
+          qc: { rate: 80 },
+          packing: { rate: 60 },
+          shipping: { rate: 90 },
+        };
+        
+        const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
+        const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
         
         // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
         function money(n) {
@@ -48,45 +85,6 @@
           return `${h} ч ${String(m).padStart(2, '0')} мин`;
         }
         
-        // === ДАННЫЕ ===
-        const MANAGER_PIN = '1234';
-        const COMPANY_NAME = 'Омега Дизайн';
-        
-        const OPS = [
-          { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.', icon: '📦' },
-          { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', icon: '✂️', hasComplexity: true },
-          { id: 'lift', name: 'Подъём на лифте', unit: 'подъём', icon: '⬆️' },
-          { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт', icon: '📏' },
-          { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт', icon: '⚙️' },
-          { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт', icon: '🔧' },
-          { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.', icon: '⭕' },
-          { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.', icon: '✨' },
-          { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт', icon: '📐' },
-          { id: 'assembly', name: 'Сборка фасада', unit: 'шт', icon: '🔨', hasSize: true },
-          { id: 'qc', name: 'Контроль качества', unit: 'шт', icon: '✅' },
-          { id: 'packing', name: 'Упаковка', unit: 'шт', icon: '📦' },
-          { id: 'shipping', name: 'Отгрузка', unit: 'компл.', icon: '🚚' },
-        ];
-        
-        const DEFAULT_RATES = {
-          unload: { rate: 50 },
-          glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
-          lift: { rate: 40 },
-          profile_cut: { rate: 100 },
-          milling: { rate: 120 },
-          drilling_profile: { rate: 90 },
-          drilling_glass: { rate: 50 },
-          cleaning: { rate: 60 },
-          sealant: { rate: 70 },
-          assembly: { sizes: { small: 180, medium: 230, large: 290 } },
-          qc: { rate: 80 },
-          packing: { rate: 60 },
-          shipping: { rate: 90 },
-        };
-        
-        const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
-        const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
-        
         function calcAmount(op, rates, qty, size, complexity) {
           const r = rates[op.id] || {};
           if (op.hasSize) {
@@ -101,7 +99,7 @@
           return (r.rate || 0) * qty;
         }
         
-        // === ХРАНИЛИЩЕ ===
+        // === ХРАНИЛИЩЕ (localStorage) ===
         const storage = {
           get: (key) => {
             try {
@@ -124,7 +122,7 @@
         
         async function getJSON(key, shared, fallback) {
           try {
-            const res = await window.storage.get(key, shared);
+            const res = await window.storage.get(key);
             return res ? JSON.parse(res.value) : fallback;
           } catch (e) {
             return fallback;
@@ -133,7 +131,7 @@
         
         async function setJSON(key, shared, value) {
           try {
-            await window.storage.set(key, JSON.stringify(value), shared);
+            await window.storage.set(key, JSON.stringify(value));
             return true;
           } catch (e) {
             return false;
@@ -163,17 +161,7 @@
           const [managerLoading, setManagerLoading] = useState(false);
           const [editRates, setEditRates] = useState(null);
           const [saveMsg, setSaveMsg] = useState('');
-          const [exportSelected, setExportSelected] = useState({});
-          const [exportPeriod, setExportPeriod] = useState('today');
-          const [exportStart, setExportStart] = useState(new Date().toISOString().split('T')[0]);
-          const [exportEnd, setExportEnd] = useState(new Date().toISOString().split('T')[0]);
-          const [exportBusy, setExportBusy] = useState(false);
-          const [exportMsg, setExportMsg] = useState('');
-          const [opStartTs, setOpStartTs] = useState(null);
-          const [opEndTs, setOpEndTs] = useState(null);
-          const [tick, setTick] = useState(0);
           const [shifts, setShifts] = useState([]);
-          const [shiftsLoading, setShiftsLoading] = useState(false);
         
           useEffect(() => {
             (async () => {
@@ -185,34 +173,26 @@
             })();
           }, []);
         
-          const loadEntries = useCallback(async (empId) => {
-            setEntriesLoading(true);
-            const list = await getJSON(`shop:entries:${empId}`, true, []);
-            setEntries(list);
-            setEntriesLoading(false);
-          }, []);
-        
-          const loadShifts = useCallback(async (empId) => {
-            setShiftsLoading(true);
-            const list = await getJSON(`shop:shifts:${empId}`, true, []);
-            setShifts(list);
-            setShiftsLoading(false);
-          }, []);
-        
           useEffect(() => {
             if (currentEmployee) {
               loadEntries(currentEmployee.id);
               loadShifts(currentEmployee.id);
             }
-          }, [currentEmployee, loadEntries, loadShifts]);
+          }, [currentEmployee]);
+        
+          const loadEntries = async (empId) => {
+            setEntriesLoading(true);
+            const list = await getJSON(`shop:entries:${empId}`, true, []);
+            setEntries(list);
+            setEntriesLoading(false);
+          };
+        
+          const loadShifts = async (empId) => {
+            const list = await getJSON(`shop:shifts:${empId}`, true, []);
+            setShifts(list);
+          };
         
           const currentShift = shifts.find((s) => s.endTs == null) || null;
-        
-          useEffect(() => {
-            if (!currentShift) return;
-            const iv = setInterval(() => setTick((t) => t + 1), 30000);
-            return () => clearInterval(iv);
-          }, [currentShift]);
         
           const startShift = async () => {
             if (currentShift || !currentEmployee) return;
@@ -251,33 +231,11 @@
             setQty(1);
             setSize('small');
             setComplexity('normal');
-            setOpStartTs(null);
-            setOpEndTs(null);
           };
-        
-          const toggleOpTimer = () => {
-            if (!opStartTs) {
-              setOpStartTs(Date.now());
-              setOpEndTs(null);
-            } else if (!opEndTs) {
-              setOpEndTs(Date.now());
-            } else {
-              setOpStartTs(Date.now());
-              setOpEndTs(null);
-            }
-          };
-        
-          useEffect(() => {
-            if (!opStartTs || opEndTs) return;
-            const iv = setInterval(() => setTick((t) => t + 1), 1000);
-            return () => clearInterval(iv);
-          }, [opStartTs, opEndTs]);
         
           const confirmEntry = async () => {
             if (!openOp) return;
             const amount = calcAmount(openOp, rates, qty, size, complexity);
-            const finalEnd = opStartTs ? (opEndTs || Date.now()) : null;
-            const durationSec = opStartTs ? Math.max(0, Math.round((finalEnd - opStartTs) / 1000)) : null;
             const entry = {
               id: 'x_' + Date.now(),
               ts: Date.now(),
@@ -287,16 +245,11 @@
               size: openOp.hasSize ? size : null,
               complexity: openOp.hasComplexity ? complexity : null,
               amount,
-              startTs: opStartTs,
-              endTs: finalEnd,
-              durationSec,
             };
             const list = [entry, ...entries];
             setEntries(list);
             await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
             setOpenOp(null);
-            setOpStartTs(null);
-            setOpEndTs(null);
           };
         
           const deleteEntry = async (id) => {
@@ -319,30 +272,21 @@
             }
           };
         
-          const periodStart = () => {
-            const d = new Date();
-            if (period === 'today') {
-              d.setHours(0, 0, 0, 0);
-            } else if (period === 'week') {
-              const day = (d.getDay() + 6) % 7;
-              d.setDate(d.getDate() - day);
-              d.setHours(0, 0, 0, 0);
-            } else {
-              return 0;
-            }
-            return d.getTime();
-          };
-        
           const loadManagerData = useCallback(async () => {
             setManagerLoading(true);
-            const start = periodStart();
+            const start = (() => {
+              const d = new Date();
+              if (period === 'today') { d.setHours(0,0,0,0); return d.getTime(); }
+              if (period === 'week') { const day = (d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d.getTime(); }
+              return 0;
+            })();
             const data = {};
             for (const emp of employees) {
               const list = await getJSON(`shop:entries:${emp.id}`, true, []);
               const filtered = list.filter((e) => e.ts >= start);
               data[emp.id] = {
-                entries: filtered.sort((a, b) => b.ts - a.ts),
-                total: filtered.reduce((s, e) => s + e.amount, 0),
+                entries: filtered.sort((a,b) => b.ts - a.ts),
+                total: filtered.reduce((s,e) => s + e.amount, 0),
               };
             }
             setManagerData(data);
@@ -358,35 +302,6 @@
               setEditRates(JSON.parse(JSON.stringify(rates)));
             }
           }, [screen, managerTab, rates]);
-        
-          useEffect(() => {
-            if (screen === 'manager' && managerTab === 'export') {
-              setExportSelected((prev) => {
-                const next = { ...prev };
-                employees.forEach((emp) => {
-                  if (!(emp.id in next)) next[emp.id] = true;
-                });
-                return next;
-              });
-            }
-          }, [screen, managerTab, employees]);
-        
-          const toggleExportEmployee = (id) => {
-            setExportSelected((prev) => ({ ...prev, [id]: !prev[id] }));
-          };
-        
-          const toggleExportAll = () => {
-            const allOn = employees.every((emp) => exportSelected[emp.id]);
-            const next = {};
-            employees.forEach((emp) => { next[emp.id] = !allOn; });
-            setExportSelected(next);
-          };
-        
-          const generateExcelReport = async () => {
-            // Простая версия без сложного экспорта
-            setExportMsg('Функция в разработке');
-            setTimeout(() => setExportMsg(''), 2000);
-          };
         
           const saveRates = async () => {
             setRates(editRates);
@@ -618,8 +533,8 @@
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       {OPS.map((op) => (
                         <button key={op.id} style={{ ...styles.button, flexDirection: 'column', alignItems: 'flex-start', gap: 4, minHeight: 60 }} onClick={() => openOperation(op)}>
-                          <span style={{ fontSize: 20 }}>{op.icon}</span>
-                          <span style={{ fontSize: 12, lineHeight: 1.2, fontWeight: 600 }}>{op.name}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600 }}>{op.name}</span>
+                          <span style={{ fontSize: 11, color: textDim }}>{op.unit}</span>
                         </button>
                       ))}
                     </div>
@@ -629,35 +544,8 @@
                   {openOp && (
                     <div style={{ ...styles.card, marginTop: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 20 }}>{openOp.icon}</span>
-                          <span style={{ fontWeight: 700, fontSize: 14 }}>{openOp.name}</span>
-                        </div>
+                        <span style={{ fontWeight: 700, fontSize: 16 }}>{openOp.name}</span>
                         <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setOpenOp(null)}>✕</button>
-                      </div>
-        
-                      {/* Таймер */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        background: panelAlt, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 10.5, color: textDim }}>⏱ Время на операцию</div>
-                          <div style={{ fontSize: 18, fontWeight: 700, ...styles.money }}>
-                            {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '—'}
-                          </div>
-                        </div>
-                        <button
-                          style={{
-                            ...styles.button, width: 'auto', padding: '6px 12px',
-                            background: !opStartTs || opEndTs ? accentDim : 'rgba(229,72,77,0.14)',
-                            border: `1px solid ${!opStartTs || opEndTs ? accent : bad}`,
-                            color: !opStartTs || opEndTs ? accent : bad,
-                          }}
-                          onClick={toggleOpTimer}
-                        >
-                          {!opStartTs ? '▶' : !opEndTs ? '⏸' : '⟳'}
-                        </button>
                       </div>
         
                       {/* Размер */}
@@ -789,6 +677,8 @@
                       ))}
                     </div>
         
+                    {managerLoading && <div style={{ color: textDim, textAlign: 'center', padding: 20 }}>Загрузка...</div>}
+        
                     {employees.map((emp) => {
                       const d = managerData[emp.id] || { entries: [], total: 0 };
                       return (
@@ -824,7 +714,7 @@
                     <div style={{ fontSize: 12, color: textDim, marginBottom: 12 }}>Изменение расценок — только для новых записей.</div>
                     {OPS.map((op) => (
                       <div key={op.id} style={{ ...styles.card, marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{op.icon} {op.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{op.name}</div>
                         {op.hasSize ? (
                           <div style={{ display: 'flex', gap: 6 }}>
                             {Object.keys(SIZE_LABELS).map((s) => (
