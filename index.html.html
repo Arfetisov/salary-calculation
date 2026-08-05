@@ -1,0 +1,1089 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import * as XLSX from 'xlsx';
+import {
+  Truck, Scissors, ArrowUpToLine, Ruler, Cog, Wrench, CircleDot,
+  Sparkles, Layers, Hammer, ClipboardCheck, PackageCheck, Send,
+  Plus, Minus, X, Lock, Users, Trash2, ChevronLeft, RefreshCw,
+  FileSpreadsheet, Download, Check, Play, Pause, RotateCcw, LogIn, LogOut, Timer
+} from 'lucide-react';
+
+const K = {
+  employees: 'shop:employees',
+  rates: 'shop:rates',
+  entries: (id) => `shop:entries:${id}`,
+  shifts: (id) => `shop:shifts:${id}`,
+};
+
+const MANAGER_PIN = '1234';
+const COMPANY_NAME = 'Омега Дизайн';
+
+const OPS = [
+  { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.', icon: Truck },
+  { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', icon: Scissors, hasComplexity: true },
+  { id: 'lift', name: 'Подъём на лифте', unit: 'подъём', icon: ArrowUpToLine },
+  { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт', icon: Ruler },
+  { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт', icon: Cog },
+  { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт', icon: Wrench },
+  { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.', icon: CircleDot },
+  { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.', icon: Sparkles },
+  { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт', icon: Layers },
+  { id: 'assembly', name: 'Сборка фасада', unit: 'шт', icon: Hammer, hasSize: true },
+  { id: 'qc', name: 'Контроль качества', unit: 'шт', icon: ClipboardCheck },
+  { id: 'packing', name: 'Упаковка', unit: 'шт', icon: PackageCheck },
+  { id: 'shipping', name: 'Отгрузка', unit: 'компл.', icon: Send },
+];
+
+const DEFAULT_RATES = {
+  unload: { rate: 50 },
+  glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
+  lift: { rate: 40 },
+  profile_cut: { rate: 100 },
+  milling: { rate: 120 },
+  drilling_profile: { rate: 90 },
+  drilling_glass: { rate: 50 },
+  cleaning: { rate: 60 },
+  sealant: { rate: 70 },
+  assembly: { sizes: { small: 180, medium: 230, large: 290 } },
+  qc: { rate: 80 },
+  packing: { rate: 60 },
+  shipping: { rate: 90 },
+};
+
+const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
+const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
+
+function money(n) {
+  return Math.round(n).toLocaleString('ru-RU') + ' \u20BD';
+}
+
+function todayKey(ts) {
+  return new Date(ts).toDateString();
+}
+
+function formatDate(ts) {
+  const s = new Date(ts).toLocaleDateString('ru-RU', {
+    day: 'numeric', month: 'long', weekday: 'long',
+  });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function toDateInputValue(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function getRange(p, customStart, customEnd) {
+  const now = Date.now();
+  if (p === 'today') {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    return [d.getTime(), now];
+  }
+  if (p === 'week') {
+    const d = new Date();
+    const day = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0);
+    return [d.getTime(), now];
+  }
+  if (p === 'custom') {
+    const s = customStart ? new Date(customStart + 'T00:00:00').getTime() : 0;
+    const e = customEnd ? new Date(customEnd + 'T23:59:59').getTime() : now;
+    return [s, e];
+  }
+  return [0, now];
+}
+
+function formatDuration(sec) {
+  if (sec == null) return '\u2014';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatShiftDuration(sec) {
+  if (sec == null) return '\u2014';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return `${h} ч ${String(m).padStart(2, '0')} мин`;
+}
+
+function formatHMS(sec) {
+  if (sec == null) return '';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function calcAmount(op, rates, qty, size, complexity) {
+  const r = rates[op.id] || {};
+  if (op.hasSize) {
+    const base = (r.sizes && r.sizes[size]) || 0;
+    return base * qty;
+  }
+  if (op.hasComplexity) {
+    const base = r.rate || 0;
+    const mult = (r.complexity && r.complexity[complexity]) || 1;
+    return base * mult * qty;
+  }
+  return (r.rate || 0) * qty;
+}
+
+async function getJSON(key, shared, fallback) {
+  try {
+    const res = await window.storage.get(key, shared);
+    return res ? JSON.parse(res.value) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+async function setJSON(key, shared, value) {
+  try {
+    await window.storage.set(key, JSON.stringify(value), shared);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export default function ShopFloorApp() {
+  const [booting, setBooting] = useState(true);
+  const [employees, setEmployees] = useState([]);
+  const [rates, setRates] = useState(DEFAULT_RATES);
+  const [screen, setScreen] = useState('select');
+  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [entriesLoading, setEntriesLoading] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [order, setOrder] = useState('');
+  const [openOp, setOpenOp] = useState(null);
+  const [qty, setQty] = useState(1);
+  const [size, setSize] = useState('small');
+  const [complexity, setComplexity] = useState('normal');
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [managerTab, setManagerTab] = useState('totals');
+  const [period, setPeriod] = useState('today');
+  const [managerData, setManagerData] = useState({});
+  const [managerLoading, setManagerLoading] = useState(false);
+  const [editRates, setEditRates] = useState(null);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [exportSelected, setExportSelected] = useState({});
+  const [exportPeriod, setExportPeriod] = useState('today');
+  const [exportStart, setExportStart] = useState(toDateInputValue(Date.now()));
+  const [exportEnd, setExportEnd] = useState(toDateInputValue(Date.now()));
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState('');
+  const [opStartTs, setOpStartTs] = useState(null);
+  const [opEndTs, setOpEndTs] = useState(null);
+  const [tick, setTick] = useState(0);
+  const [shifts, setShifts] = useState([]);
+  const [shiftsLoading, setShiftsLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const emp = await getJSON(K.employees, true, []);
+      const r = await getJSON(K.rates, true, DEFAULT_RATES);
+      setEmployees(emp);
+      setRates(r);
+      setBooting(false);
+    })();
+  }, []);
+
+  const loadEntries = useCallback(async (empId) => {
+    setEntriesLoading(true);
+    const list = await getJSON(K.entries(empId), true, []);
+    setEntries(list);
+    setEntriesLoading(false);
+  }, []);
+
+  const loadShifts = useCallback(async (empId) => {
+    setShiftsLoading(true);
+    const list = await getJSON(K.shifts(empId), true, []);
+    setShifts(list);
+    setShiftsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (currentEmployee) {
+      loadEntries(currentEmployee.id);
+      loadShifts(currentEmployee.id);
+    }
+  }, [currentEmployee, loadEntries, loadShifts]);
+
+  const currentShift = shifts.find((s) => s.endTs == null) || null;
+
+  useEffect(() => {
+    if (!currentShift) return;
+    const iv = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(iv);
+  }, [currentShift]);
+
+  const startShift = async () => {
+    if (currentShift || !currentEmployee) return;
+    const rec = { id: 's_' + Date.now(), startTs: Date.now(), endTs: null };
+    const list = [rec, ...shifts];
+    setShifts(list);
+    await setJSON(K.shifts(currentEmployee.id), true, list);
+  };
+
+  const endShift = async () => {
+    if (!currentShift || !currentEmployee) return;
+    const list = shifts.map((s) => (s.id === currentShift.id ? { ...s, endTs: Date.now() } : s));
+    setShifts(list);
+    await setJSON(K.shifts(currentEmployee.id), true, list);
+  };
+
+  const addEmployee = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const id = 'e_' + Date.now();
+    const list = [...employees, { id, name }];
+    setEmployees(list);
+    await setJSON(K.employees, true, list);
+    setNewName('');
+    setCurrentEmployee({ id, name });
+    setScreen('employee');
+  };
+
+  const pickEmployee = (emp) => {
+    setCurrentEmployee(emp);
+    setScreen('employee');
+  };
+
+  const openOperation = (op) => {
+    setOpenOp(op);
+    setQty(1);
+    setSize('small');
+    setComplexity('normal');
+    setOpStartTs(null);
+    setOpEndTs(null);
+  };
+
+  const toggleOpTimer = () => {
+    if (!opStartTs) {
+      setOpStartTs(Date.now());
+      setOpEndTs(null);
+    } else if (!opEndTs) {
+      setOpEndTs(Date.now());
+    } else {
+      setOpStartTs(Date.now());
+      setOpEndTs(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!opStartTs || opEndTs) return;
+    const iv = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, [opStartTs, opEndTs]);
+
+  const confirmEntry = async () => {
+    if (!openOp) return;
+    const amount = calcAmount(openOp, rates, qty, size, complexity);
+    const finalEnd = opStartTs ? (opEndTs || Date.now()) : null;
+    const durationSec = opStartTs ? Math.max(0, Math.round((finalEnd - opStartTs) / 1000)) : null;
+    const entry = {
+      id: 'x_' + Date.now(),
+      ts: Date.now(),
+      order: order.trim() || '\u2014',
+      opId: openOp.id,
+      qty,
+      size: openOp.hasSize ? size : null,
+      complexity: openOp.hasComplexity ? complexity : null,
+      amount,
+      startTs: opStartTs,
+      endTs: finalEnd,
+      durationSec,
+    };
+    const list = [entry, ...entries];
+    setEntries(list);
+    await setJSON(K.entries(currentEmployee.id), true, list);
+    setOpenOp(null);
+    setOpStartTs(null);
+    setOpEndTs(null);
+  };
+
+  const deleteEntry = async (id) => {
+    const list = entries.filter((e) => e.id !== id);
+    setEntries(list);
+    await setJSON(K.entries(currentEmployee.id), true, list);
+  };
+
+  const todayEntries = entries.filter((e) => todayKey(e.ts) === todayKey(Date.now()));
+  const todayTotal = todayEntries.reduce((s, e) => s + e.amount, 0);
+  const todayLabel = formatDate(Date.now());
+
+  const tryManagerLogin = () => {
+    if (pinInput === MANAGER_PIN) {
+      setScreen('manager');
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  };
+
+  const periodStart = () => {
+    const d = new Date();
+    if (period === 'today') {
+      d.setHours(0, 0, 0, 0);
+    } else if (period === 'week') {
+      const day = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - day);
+      d.setHours(0, 0, 0, 0);
+    } else {
+      return 0;
+    }
+    return d.getTime();
+  };
+
+  const loadManagerData = useCallback(async () => {
+    setManagerLoading(true);
+    const start = periodStart();
+    const data = {};
+    for (const emp of employees) {
+      const list = await getJSON(K.entries(emp.id), true, []);
+      const filtered = list.filter((e) => e.ts >= start);
+      data[emp.id] = {
+        entries: filtered.sort((a, b) => b.ts - a.ts),
+        total: filtered.reduce((s, e) => s + e.amount, 0),
+      };
+    }
+    setManagerData(data);
+    setManagerLoading(false);
+  }, [employees, period]);
+
+  useEffect(() => {
+    if (screen === 'manager' && managerTab === 'totals') loadManagerData();
+  }, [screen, managerTab, period, loadManagerData]);
+
+  useEffect(() => {
+    if (screen === 'manager' && managerTab === 'rates') {
+      setEditRates(JSON.parse(JSON.stringify(rates)));
+    }
+  }, [screen, managerTab, rates]);
+
+  useEffect(() => {
+    if (screen === 'manager' && managerTab === 'export') {
+      setExportSelected((prev) => {
+        const next = { ...prev };
+        employees.forEach((emp) => {
+          if (!(emp.id in next)) next[emp.id] = true;
+        });
+        return next;
+      });
+    }
+  }, [screen, managerTab, employees]);
+
+  const toggleExportEmployee = (id) => {
+    setExportSelected((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleExportAll = () => {
+    const allOn = employees.every((emp) => exportSelected[emp.id]);
+    const next = {};
+    employees.forEach((emp) => { next[emp.id] = !allOn; });
+    setExportSelected(next);
+  };
+
+  const generateExcelReport = async () => {
+    const chosen = employees.filter((emp) => exportSelected[emp.id]);
+    if (chosen.length === 0) {
+      setExportMsg('Выберите хотя бы одного сотрудника');
+      setTimeout(() => setExportMsg(''), 2500);
+      return;
+    }
+    setExportBusy(true);
+    setExportMsg('');
+    try {
+      const [start, end] = getRange(exportPeriod, exportStart, exportEnd);
+      const rows = [];
+      const summary = [];
+      const shiftRows = [];
+      for (const emp of chosen) {
+        const list = await getJSON(K.entries(emp.id), true, []);
+        const filtered = list.filter((e) => e.ts >= start && e.ts <= end);
+        filtered.forEach((e) => {
+          const op = OPS.find((o) => o.id === e.opId);
+          rows.push({
+            'Дата': new Date(e.ts).toLocaleDateString('ru-RU'),
+            'Время': new Date(e.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+            'Сотрудник': emp.name,
+            'Заказ': e.order,
+            'Операция': op ? op.name : e.opId,
+            'Количество': e.qty,
+            'Ед.': op ? op.unit : '',
+            'Время на операцию': e.durationSec != null ? formatHMS(e.durationSec) : '',
+            'Сумма, ₽': Math.round(e.amount),
+          });
+        });
+        summary.push({
+          'Сотрудник': emp.name,
+          'Операций': filtered.length,
+          'Сумма, ₽': Math.round(filtered.reduce((s, e) => s + e.amount, 0)),
+        });
+
+        const shiftList = await getJSON(K.shifts(emp.id), true, []);
+        const filteredShifts = shiftList.filter((s) => s.startTs >= start && s.startTs <= end);
+        filteredShifts.forEach((s) => {
+          const durSec = s.endTs ? Math.round((s.endTs - s.startTs) / 1000) : null;
+          shiftRows.push({
+            'Сотрудник': emp.name,
+            'Дата': new Date(s.startTs).toLocaleDateString('ru-RU'),
+            'Начало': formatTime(s.startTs),
+            'Конец': s.endTs ? formatTime(s.endTs) : 'не завершена',
+            'Длительность': durSec != null ? formatHMS(durSec) : '\u2014',
+          });
+        });
+      }
+      rows.sort((a, b) => (a['Дата'] + a['Время']).localeCompare(b['Дата'] + b['Время']));
+      shiftRows.sort((a, b) => (a['Дата'] + a['Начало']).localeCompare(b['Дата'] + b['Начало']));
+      summary.push({
+        'Сотрудник': 'ИТОГО',
+        'Операций': summary.reduce((s, r) => s + r['Операций'], 0),
+        'Сумма, ₽': summary.reduce((s, r) => s + r['Сумма, ₽'], 0),
+      });
+
+      const wb = XLSX.utils.book_new();
+      const wsSummary = XLSX.utils.json_to_sheet(summary);
+      wsSummary['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка');
+
+      const wsRows = XLSX.utils.json_to_sheet(rows);
+      wsRows['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 7 }, { wch: 14 }, { wch: 11 }];
+      XLSX.utils.book_append_sheet(wb, wsRows, 'Операции');
+
+      const wsShifts = XLSX.utils.json_to_sheet(shiftRows);
+      wsShifts['!cols'] = [{ wch: 20 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, wsShifts, 'Смены');
+
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const periodLabel = exportPeriod === 'custom' ? `${exportStart}_${exportEnd}` : exportPeriod;
+      a.href = url;
+      a.download = `отчет_цех_${periodLabel}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setExportMsg(rows.length ? 'Файл скачан' : 'Файл скачан (данных за период не найдено)');
+    } catch (e) {
+      setExportMsg('Не получилось сформировать файл');
+    }
+    setExportBusy(false);
+    setTimeout(() => setExportMsg(''), 3000);
+  };
+
+  const saveRates = async () => {
+    setRates(editRates);
+    await setJSON(K.rates, true, editRates);
+    setSaveMsg('Расценки сохранены');
+    setTimeout(() => setSaveMsg(''), 2000);
+  };
+
+  const bg = '#1c1f22';
+  const panel = '#262b30';
+  const panelAlt = '#2f353b';
+  const border = '#3a4149';
+  const text = '#f2f1ec';
+  const textDim = '#9aa4ad';
+  const accent = '#ff6a2b';
+  const accentDim = 'rgba(255,106,43,0.16)';
+  const good = '#4caf7d';
+  const bad = '#e5484d';
+
+  const styles = {
+    root: {
+      background: bg,
+      color: text,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      minHeight: 400,
+      maxWidth: 460,
+      margin: '0 auto',
+      borderRadius: 16,
+      overflow: 'hidden',
+      border: `1px solid ${border}`,
+      position: 'relative',
+    },
+    companyLabel: {
+      position: 'absolute',
+      top: 14,
+      right: 16,
+      fontSize: 10.5,
+      fontWeight: 600,
+      letterSpacing: '0.03em',
+      color: textDim,
+      zIndex: 1,
+    },
+    header: {
+      padding: '16px 18px',
+      borderBottom: `1px solid ${border}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    eyebrow: {
+      fontSize: 11,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      color: textDim,
+      fontWeight: 600,
+    },
+    h1: { fontSize: 18, fontWeight: 700, margin: '2px 0 0' },
+    body: { padding: 16 },
+    button: {
+      background: panelAlt,
+      color: text,
+      border: `1px solid ${border}`,
+      borderRadius: 10,
+      padding: '12px 14px',
+      fontSize: 15,
+      fontWeight: 600,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      width: '100%',
+      textAlign: 'left',
+    },
+    primaryButton: {
+      background: accent,
+      color: '#1c1206',
+      border: 'none',
+      borderRadius: 10,
+      padding: '13px 16px',
+      fontSize: 15,
+      fontWeight: 700,
+      cursor: 'pointer',
+      width: '100%',
+    },
+    input: {
+      background: panelAlt,
+      color: text,
+      border: `1px solid ${border}`,
+      borderRadius: 10,
+      padding: '11px 12px',
+      fontSize: 15,
+      width: '100%',
+      boxSizing: 'border-box',
+    },
+    card: {
+      background: panel,
+      border: `1px solid ${border}`,
+      borderRadius: 12,
+      padding: 14,
+    },
+    money: {
+      fontFamily: "'SF Mono', 'Roboto Mono', ui-monospace, monospace",
+      fontVariantNumeric: 'tabular-nums',
+    },
+  };
+
+  if (booting) {
+    return (
+      <div style={{ ...styles.root, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <div style={styles.companyLabel}>{COMPANY_NAME}</div>
+        <span style={{ color: textDim, fontSize: 14 }}>Загрузка...</span>
+      </div>
+    );
+  }
+
+  // ---------- SELECT EMPLOYEE ----------
+  if (screen === 'select') {
+    return (
+      <div style={styles.root}>
+        <div style={styles.companyLabel}>{COMPANY_NAME}</div>
+        <div style={styles.header}>
+          <div>
+            <div style={styles.eyebrow}>Цех \u00b7 учёт операций</div>
+            <div style={styles.h1}>Кто работает?</div>
+            <div style={{ fontSize: 12, color: textDim, marginTop: 3 }}>{todayLabel}</div>
+          </div>
+        </div>
+        <div style={{ ...styles.body, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {employees.length === 0 && (
+            <div style={{ color: textDim, fontSize: 13, marginBottom: 4 }}>
+              Пока никого нет. Добавьте первого сотрудника ниже.
+            </div>
+          )}
+          {employees.map((emp) => (
+            <button key={emp.id} style={styles.button} onClick={() => pickEmployee(emp)}>
+              <span style={{
+                width: 30, height: 30, borderRadius: '50%', background: accentDim, color: accent,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0,
+              }}>
+                {emp.name.trim().charAt(0).toUpperCase()}
+              </span>
+              {emp.name}
+            </button>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <input
+              style={styles.input}
+              placeholder="Имя нового сотрудника"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addEmployee()}
+            />
+            <button style={{ ...styles.primaryButton, width: 'auto', padding: '11px 16px' }} onClick={addEmployee}>
+              <Plus size={18} />
+            </button>
+          </div>
+          <button
+            style={{ ...styles.button, marginTop: 12, justifyContent: 'center', color: textDim }}
+            onClick={() => setScreen('pin')}
+          >
+            <Lock size={16} /> Режим руководителя
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- PIN ----------
+  if (screen === 'pin') {
+    return (
+      <div style={styles.root}>
+        <div style={styles.companyLabel}>{COMPANY_NAME}</div>
+        <div style={styles.header}>
+          <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => { setScreen('select'); setPinError(false); setPinInput(''); }}>
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ ...styles.h1, fontSize: 15 }}>Код руководителя</div>
+          <div style={{ width: 20 }} />
+        </div>
+        <div style={{ ...styles.body, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            style={styles.input}
+            type="password"
+            inputMode="numeric"
+            placeholder="Введите код"
+            value={pinInput}
+            onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+            onKeyDown={(e) => e.key === 'Enter' && tryManagerLogin()}
+            autoFocus
+          />
+          {pinError && <div style={{ color: bad, fontSize: 13 }}>Неверный код. Попробуйте ещё раз.</div>}
+          <button style={styles.primaryButton} onClick={tryManagerLogin}>Войти</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- EMPLOYEE DASHBOARD ----------
+  if (screen === 'employee' && currentEmployee) {
+    return (
+      <div style={styles.root}>
+        <div style={styles.companyLabel}>{COMPANY_NAME}</div>
+        <div style={styles.header}>
+          <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => { setScreen('select'); setCurrentEmployee(null); setOrder(''); }}>
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={styles.eyebrow}>{currentEmployee.name}</div>
+            <div style={{ ...styles.h1, ...styles.money, color: accent }}>{money(todayTotal)}</div>
+          </div>
+          <div style={{ width: 20 }} />
+        </div>
+
+        <div style={styles.body}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: panelAlt, border: `1px solid ${border}`, borderRadius: 10,
+            padding: '10px 12px', marginBottom: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 11, color: textDim }}>{currentShift ? 'Смена идёт' : 'Смена не начата'}</div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                {currentShift
+                  ? `с ${formatTime(currentShift.startTs)} \u00b7 ${formatShiftDuration(Math.floor((Date.now() - currentShift.startTs) / 1000))}`
+                  : '\u2014'}
+              </div>
+            </div>
+            <button
+              style={{
+                ...styles.button, width: 'auto', padding: '9px 14px',
+                background: currentShift ? 'rgba(229,72,77,0.14)' : accentDim,
+                border: `1px solid ${currentShift ? bad : accent}`,
+                color: currentShift ? bad : accent,
+              }}
+              onClick={currentShift ? endShift : startShift}
+            >
+              {currentShift ? <LogOut size={16} /> : <LogIn size={16} />}
+              {currentShift ? 'Закончить смену' : 'Начать смену'}
+            </button>
+          </div>
+
+          <input
+            style={{ ...styles.input, marginBottom: 12 }}
+            placeholder="Номер заказа"
+            value={order}
+            onChange={(e) => setOrder(e.target.value)}
+          />
+
+          {!openOp && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {OPS.map((op) => {
+                const Icon = op.icon;
+                return (
+                  <button key={op.id} style={{ ...styles.button, flexDirection: 'column', alignItems: 'flex-start', gap: 6, minHeight: 66 }} onClick={() => openOperation(op)}>
+                    <Icon size={18} color={accent} />
+                    <span style={{ fontSize: 12.5, lineHeight: 1.25, fontWeight: 600 }}>{op.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {openOp && (
+            <div style={{ ...styles.card, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <openOp.icon size={18} color={accent} />
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{openOp.name}</span>
+                </div>
+                <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer' }} onClick={() => setOpenOp(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: panelAlt, borderRadius: 8, padding: '8px 10px',
+              }}>
+                <div>
+                  <div style={{ fontSize: 10.5, color: textDim, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Timer size={12} /> Время на операцию
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, ...styles.money }}>
+                    {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '\u2014'}
+                  </div>
+                </div>
+                <button
+                  style={{
+                    ...styles.button, width: 'auto', padding: '8px 12px',
+                    background: !opStartTs || opEndTs ? accentDim : 'rgba(229,72,77,0.14)',
+                    border: `1px solid ${!opStartTs || opEndTs ? accent : bad}`,
+                    color: !opStartTs || opEndTs ? accent : bad,
+                  }}
+                  onClick={toggleOpTimer}
+                >
+                  {!opStartTs ? <Play size={15} /> : !opEndTs ? <Pause size={15} /> : <RotateCcw size={15} />}
+                  {!opStartTs ? 'Начать' : !opEndTs ? 'Стоп' : 'Заново'}
+                </button>
+              </div>
+
+              {openOp.hasSize && (
+                <div>
+                  <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Размер фасада</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {Object.keys(SIZE_LABELS).map((s) => (
+                      <button key={s} onClick={() => setSize(s)} style={{
+                        flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                        border: `1px solid ${s === size ? accent : border}`,
+                        background: s === size ? accentDim : panelAlt,
+                        color: s === size ? accent : text,
+                      }}>{SIZE_LABELS[s]}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {openOp.hasComplexity && (
+                <div>
+                  <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Материал</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {Object.keys(COMPLEXITY_LABELS).map((c) => (
+                      <button key={c} onClick={() => setComplexity(c)} style={{
+                        flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        border: `1px solid ${c === complexity ? accent : border}`,
+                        background: c === complexity ? accentDim : panelAlt,
+                        color: c === complexity ? accent : text,
+                      }}>{COMPLEXITY_LABELS[c]}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Количество, {openOp.unit}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => Math.max(1, q - 1))}>
+                    <Minus size={16} />
+                  </button>
+                  <span style={{ fontSize: 22, fontWeight: 700, minWidth: 40, textAlign: 'center', ...styles.money }}>{qty}</span>
+                  <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => q + 1)}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderTop: `1px solid ${border}`, paddingTop: 10 }}>
+                <span style={{ fontSize: 13, color: textDim }}>Начислится</span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: good, ...styles.money }}>
+                  +{money(calcAmount(openOp, rates, qty, size, complexity))}
+                </span>
+              </div>
+
+              <button style={styles.primaryButton} onClick={confirmEntry}>Добавить запись</button>
+              <div style={{ fontSize: 11, color: textDim, textAlign: 'center' }}>Время — только для статистики, на сумму не влияет</div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 18 }}>
+            <div style={{ ...styles.eyebrow, marginBottom: 8 }}>{todayLabel} \u00b7 {todayEntries.length} записей</div>
+            {entriesLoading && <div style={{ color: textDim, fontSize: 13 }}>Загрузка...</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {todayEntries.map((e) => {
+                const op = OPS.find((o) => o.id === e.opId);
+                return (
+                  <div key={e.id} style={{ ...styles.card, padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{op ? op.name : e.opId}</div>
+                      <div style={{ fontSize: 11.5, color: textDim }}>
+                        Заказ {e.order} \u00b7 {e.qty} {op ? op.unit : ''}
+                        {e.size ? `, ${SIZE_LABELS[e.size]}` : ''}
+                        {e.complexity && e.complexity !== 'normal' ? `, ${COMPLEXITY_LABELS[e.complexity]}` : ''}
+                        {e.durationSec != null ? ` \u00b7 ${formatDuration(e.durationSec)}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: good, ...styles.money }}>{money(e.amount)}</span>
+                      <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', padding: 4 }} onClick={() => deleteEntry(e.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!entriesLoading && todayEntries.length === 0 && (
+                <div style={{ color: textDim, fontSize: 13 }}>Записей ещё нет. Выберите операцию выше.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- MANAGER ----------
+  if (screen === 'manager') {
+    return (
+      <div style={styles.root}>
+        <div style={styles.companyLabel}>{COMPANY_NAME}</div>
+        <div style={styles.header}>
+          <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => setScreen('select')}>
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Users size={16} color={accent} />
+            <div style={{ ...styles.h1, fontSize: 15 }}>Руководитель</div>
+          </div>
+          <div style={{ width: 20 }} />
+        </div>
+
+        <div style={{ display: 'flex', borderBottom: `1px solid ${border}` }}>
+          {[['totals', 'Сводка'], ['export', 'В Excel'], ['rates', 'Расценки']].map(([id, label]) => (
+            <button key={id} onClick={() => setManagerTab(id)} style={{
+              flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer',
+              color: managerTab === id ? accent : textDim,
+              borderBottom: managerTab === id ? `2px solid ${accent}` : '2px solid transparent',
+              fontSize: 13, fontWeight: 700,
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {managerTab === 'totals' && (
+          <div style={styles.body}>
+            <div style={{ fontSize: 12, color: textDim, marginBottom: 10 }}>{todayLabel}</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+              {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время']].map(([id, label]) => (
+                <button key={id} onClick={() => setPeriod(id)} style={{
+                  flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${period === id ? accent : border}`,
+                  background: period === id ? accentDim : panelAlt,
+                  color: period === id ? accent : text,
+                }}>{label}</button>
+              ))}
+            </div>
+
+            {managerLoading && <div style={{ color: textDim, fontSize: 13 }}>Загрузка...</div>}
+
+            {!managerLoading && employees.length === 0 && (
+              <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {employees.map((emp) => {
+                const d = managerData[emp.id] || { entries: [], total: 0 };
+                return (
+                  <div key={emp.id} style={styles.card}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{emp.name}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15, color: good, ...styles.money }}>{money(d.total)}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: textDim, marginTop: 2 }}>{d.entries.length} операций</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!managerLoading && employees.length > 0 && (
+              <div style={{ ...styles.card, marginTop: 10, background: panelAlt, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, color: textDim, fontWeight: 600 }}>Итого по цеху</span>
+                <span style={{ fontWeight: 700, fontSize: 15, ...styles.money }}>
+                  {money(Object.values(managerData).reduce((s, d) => s + (d.total || 0), 0))}
+                </span>
+              </div>
+            )}
+
+            <button style={{ ...styles.button, marginTop: 10, justifyContent: 'center', color: textDim, fontSize: 12.5 }} onClick={loadManagerData}>
+              <RefreshCw size={14} /> Обновить
+            </button>
+          </div>
+        )}
+
+        {managerTab === 'export' && (
+          <div style={styles.body}>
+            <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Сотрудники</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+              <button style={{ ...styles.button, padding: '8px 12px', fontSize: 12.5, color: textDim, justifyContent: 'space-between' }} onClick={toggleExportAll}>
+                Выбрать всех / снять всех
+                <Check size={14} />
+              </button>
+              {employees.map((emp) => {
+                const checked = !!exportSelected[emp.id];
+                return (
+                  <button key={emp.id} onClick={() => toggleExportEmployee(emp.id)} style={{
+                    ...styles.button, justifyContent: 'space-between',
+                    border: `1px solid ${checked ? accent : border}`,
+                    background: checked ? accentDim : panelAlt,
+                    color: checked ? accent : text,
+                  }}>
+                    {emp.name}
+                    {checked && <Check size={16} />}
+                  </button>
+                );
+              })}
+              {employees.length === 0 && <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>}
+            </div>
+
+            <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Период</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+              {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время'], ['custom', 'Свой период']].map(([id, label]) => (
+                <button key={id} onClick={() => setExportPeriod(id)} style={{
+                  padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${exportPeriod === id ? accent : border}`,
+                  background: exportPeriod === id ? accentDim : panelAlt,
+                  color: exportPeriod === id ? accent : text,
+                }}>{label}</button>
+              ))}
+            </div>
+
+            {exportPeriod === 'custom' && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>С</div>
+                  <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>По</div>
+                  <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <button style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={generateExcelReport} disabled={exportBusy}>
+              {exportBusy ? <RefreshCw size={16} /> : <FileSpreadsheet size={16} />}
+              {exportBusy ? 'Формирую...' : 'Сформировать отчёт'}
+            </button>
+            {exportMsg && (
+              <div style={{ color: exportMsg === 'Файл скачан' ? good : textDim, fontSize: 13, marginTop: 10, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {exportMsg === 'Файл скачан' && <Download size={14} />}
+                {exportMsg}
+              </div>
+            )}
+          </div>
+        )}
+
+        {managerTab === 'rates' && editRates && (
+          <div style={styles.body}>
+            <div style={{ fontSize: 12, color: textDim, marginBottom: 12, lineHeight: 1.5 }}>
+              Изменение расценки не меняет уже сохранённые записи \u2014 только новые.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {OPS.map((op) => (
+                <div key={op.id} style={styles.card}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8 }}>{op.name}</div>
+                  {op.hasSize ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {Object.keys(SIZE_LABELS).map((s) => (
+                        <div key={s} style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>{SIZE_LABELS[s]}</div>
+                          <input
+                            style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
+                            type="number"
+                            value={editRates.assembly.sizes[s]}
+                            onChange={(e) => setEditRates((prev) => ({
+                              ...prev,
+                              assembly: { ...prev.assembly, sizes: { ...prev.assembly.sizes, [s]: Number(e.target.value) } },
+                            }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : op.hasComplexity ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>Базовая ставка</div>
+                        <input
+                          style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
+                          type="number"
+                          value={editRates.glass_cut.rate}
+                          onChange={(e) => setEditRates((prev) => ({ ...prev, glass_cut: { ...prev.glass_cut, rate: Number(e.target.value) } }))}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>Коэф. капризное</div>
+                        <input
+                          style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
+                          type="number"
+                          step="0.1"
+                          value={editRates.glass_cut.complexity.moro}
+                          onChange={(e) => setEditRates((prev) => ({
+                            ...prev,
+                            glass_cut: { ...prev.glass_cut, complexity: { ...prev.glass_cut.complexity, moro: Number(e.target.value) } },
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <input
+                      style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
+                      type="number"
+                      value={editRates[op.id].rate}
+                      onChange={(e) => setEditRates((prev) => ({ ...prev, [op.id]: { ...prev[op.id], rate: Number(e.target.value) } }))}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            <button style={{ ...styles.primaryButton, marginTop: 14 }} onClick={saveRates}>Сохранить расценки</button>
+            {saveMsg && <div style={{ color: good, fontSize: 13, marginTop: 8, textAlign: 'center' }}>{saveMsg}</div>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
