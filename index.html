@@ -6,16 +6,18 @@
     <title>Калькулятор зарплаты</title>
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
-        
+        const XLSX = window.XLSX;
+
         // === ДАННЫЕ ===
         const MANAGER_PIN = '1234';
         const COMPANY_NAME = 'Омега Дизайн';
-        
+
         const OPS = [
           { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.' },
           { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', hasComplexity: true },
@@ -31,7 +33,7 @@
           { id: 'packing', name: 'Упаковка', unit: 'шт' },
           { id: 'shipping', name: 'Отгрузка', unit: 'компл.' },
         ];
-        
+
         const DEFAULT_RATES = {
           unload: { rate: 50 },
           glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
@@ -47,44 +49,79 @@
           packing: { rate: 60 },
           shipping: { rate: 90 },
         };
-        
+
         const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
         const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
-        
+
         // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
         function money(n) {
           return Math.round(n).toLocaleString('ru-RU') + ' ₽';
         }
-        
+
         function todayKey(ts) {
           return new Date(ts).toDateString();
         }
-        
+
         function formatDate(ts) {
           const s = new Date(ts).toLocaleDateString('ru-RU', {
             day: 'numeric', month: 'long', weekday: 'long',
           });
           return s.charAt(0).toUpperCase() + s.slice(1);
         }
-        
+
         function formatTime(ts) {
           return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         }
-        
+
         function formatDuration(sec) {
           if (sec == null) return '—';
           const m = Math.floor(sec / 60);
           const s = sec % 60;
           return `${m}:${String(s).padStart(2, '0')}`;
         }
-        
+
         function formatShiftDuration(sec) {
           if (sec == null) return '—';
           const h = Math.floor(sec / 3600);
           const m = Math.floor((sec % 3600) / 60);
           return `${h} ч ${String(m).padStart(2, '0')} мин`;
         }
-        
+
+        function formatHMS(sec) {
+          if (sec == null) return '';
+          const h = Math.floor(sec / 3600);
+          const m = Math.floor((sec % 3600) / 60);
+          const s = sec % 60;
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
+
+        function toDateInputValue(ts) {
+          const d = new Date(ts);
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+
+        function getRange(p, customStart, customEnd) {
+          const now = Date.now();
+          if (p === 'today') {
+            const d = new Date(); d.setHours(0, 0, 0, 0);
+            return [d.getTime(), now];
+          }
+          if (p === 'week') {
+            const d = new Date();
+            const day = (d.getDay() + 6) % 7;
+            d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0);
+            return [d.getTime(), now];
+          }
+          if (p === 'custom') {
+            const s = customStart ? new Date(customStart + 'T00:00:00').getTime() : 0;
+            const e = customEnd ? new Date(customEnd + 'T23:59:59').getTime() : now;
+            return [s, e];
+          }
+          return [0, now];
+        }
+
         function calcAmount(op, rates, qty, size, complexity) {
           const r = rates[op.id] || {};
           if (op.hasSize) {
@@ -98,7 +135,7 @@
           }
           return (r.rate || 0) * qty;
         }
-        
+
         // === ХРАНИЛИЩЕ (localStorage) ===
         const storage = {
           get: (key) => {
@@ -119,7 +156,7 @@
           }
         };
         window.storage = storage;
-        
+
         async function getJSON(key, shared, fallback) {
           try {
             const res = await window.storage.get(key);
@@ -128,7 +165,7 @@
             return fallback;
           }
         }
-        
+
         async function setJSON(key, shared, value) {
           try {
             await window.storage.set(key, JSON.stringify(value));
@@ -137,7 +174,7 @@
             return false;
           }
         }
-        
+
         // === ГЛАВНОЕ ПРИЛОЖЕНИЕ ===
         function ShopFloorApp() {
           const [booting, setBooting] = useState(true);
@@ -161,8 +198,17 @@
           const [managerLoading, setManagerLoading] = useState(false);
           const [editRates, setEditRates] = useState(null);
           const [saveMsg, setSaveMsg] = useState('');
+          const [exportSelected, setExportSelected] = useState({});
+          const [exportPeriod, setExportPeriod] = useState('today');
+          const [exportStart, setExportStart] = useState(toDateInputValue(Date.now()));
+          const [exportEnd, setExportEnd] = useState(toDateInputValue(Date.now()));
+          const [exportBusy, setExportBusy] = useState(false);
+          const [exportMsg, setExportMsg] = useState('');
+          const [opStartTs, setOpStartTs] = useState(null);
+          const [opEndTs, setOpEndTs] = useState(null);
+          const [tick, setTick] = useState(0);
           const [shifts, setShifts] = useState([]);
-        
+
           useEffect(() => {
             (async () => {
               const emp = await getJSON('shop:employees', true, []);
@@ -172,28 +218,34 @@
               setBooting(false);
             })();
           }, []);
-        
+
           useEffect(() => {
             if (currentEmployee) {
               loadEntries(currentEmployee.id);
               loadShifts(currentEmployee.id);
             }
           }, [currentEmployee]);
-        
+
           const loadEntries = async (empId) => {
             setEntriesLoading(true);
             const list = await getJSON(`shop:entries:${empId}`, true, []);
             setEntries(list);
             setEntriesLoading(false);
           };
-        
+
           const loadShifts = async (empId) => {
             const list = await getJSON(`shop:shifts:${empId}`, true, []);
             setShifts(list);
           };
-        
+
           const currentShift = shifts.find((s) => s.endTs == null) || null;
-        
+
+          useEffect(() => {
+            if (!currentShift) return;
+            const iv = setInterval(() => setTick((t) => t + 1), 30000);
+            return () => clearInterval(iv);
+          }, [currentShift]);
+
           const startShift = async () => {
             if (currentShift || !currentEmployee) return;
             const rec = { id: 's_' + Date.now(), startTs: Date.now(), endTs: null };
@@ -201,14 +253,14 @@
             setShifts(list);
             await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
           };
-        
+
           const endShift = async () => {
             if (!currentShift || !currentEmployee) return;
             const list = shifts.map((s) => (s.id === currentShift.id ? { ...s, endTs: Date.now() } : s));
             setShifts(list);
             await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
           };
-        
+
           const addEmployee = async () => {
             const name = newName.trim();
             if (!name) return;
@@ -220,22 +272,44 @@
             setCurrentEmployee({ id, name });
             setScreen('employee');
           };
-        
+
           const pickEmployee = (emp) => {
             setCurrentEmployee(emp);
             setScreen('employee');
           };
-        
+
           const openOperation = (op) => {
             setOpenOp(op);
             setQty(1);
             setSize('small');
             setComplexity('normal');
+            setOpStartTs(null);
+            setOpEndTs(null);
           };
-        
+
+          const toggleOpTimer = () => {
+            if (!opStartTs) {
+              setOpStartTs(Date.now());
+              setOpEndTs(null);
+            } else if (!opEndTs) {
+              setOpEndTs(Date.now());
+            } else {
+              setOpStartTs(Date.now());
+              setOpEndTs(null);
+            }
+          };
+
+          useEffect(() => {
+            if (!opStartTs || opEndTs) return;
+            const iv = setInterval(() => setTick((t) => t + 1), 1000);
+            return () => clearInterval(iv);
+          }, [opStartTs, opEndTs]);
+
           const confirmEntry = async () => {
             if (!openOp) return;
             const amount = calcAmount(openOp, rates, qty, size, complexity);
+            const finalEnd = opStartTs ? (opEndTs || Date.now()) : null;
+            const durationSec = opStartTs ? Math.max(0, Math.round((finalEnd - opStartTs) / 1000)) : null;
             const entry = {
               id: 'x_' + Date.now(),
               ts: Date.now(),
@@ -245,23 +319,28 @@
               size: openOp.hasSize ? size : null,
               complexity: openOp.hasComplexity ? complexity : null,
               amount,
+              startTs: opStartTs,
+              endTs: finalEnd,
+              durationSec,
             };
             const list = [entry, ...entries];
             setEntries(list);
             await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
             setOpenOp(null);
+            setOpStartTs(null);
+            setOpEndTs(null);
           };
-        
+
           const deleteEntry = async (id) => {
             const list = entries.filter((e) => e.id !== id);
             setEntries(list);
             await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
           };
-        
+
           const todayEntries = entries.filter((e) => todayKey(e.ts) === todayKey(Date.now()));
           const todayTotal = todayEntries.reduce((s, e) => s + e.amount, 0);
           const todayLabel = formatDate(Date.now());
-        
+
           const tryManagerLogin = () => {
             if (pinInput === MANAGER_PIN) {
               setScreen('manager');
@@ -271,7 +350,7 @@
               setPinError(true);
             }
           };
-        
+
           const loadManagerData = useCallback(async () => {
             setManagerLoading(true);
             const start = (() => {
@@ -292,24 +371,137 @@
             setManagerData(data);
             setManagerLoading(false);
           }, [employees, period]);
-        
+
           useEffect(() => {
             if (screen === 'manager' && managerTab === 'totals') loadManagerData();
           }, [screen, managerTab, period, loadManagerData]);
-        
+
           useEffect(() => {
             if (screen === 'manager' && managerTab === 'rates') {
               setEditRates(JSON.parse(JSON.stringify(rates)));
             }
           }, [screen, managerTab, rates]);
-        
+
+          useEffect(() => {
+            if (screen === 'manager' && managerTab === 'export') {
+              setExportSelected((prev) => {
+                const next = { ...prev };
+                employees.forEach((emp) => {
+                  if (!(emp.id in next)) next[emp.id] = true;
+                });
+                return next;
+              });
+            }
+          }, [screen, managerTab, employees]);
+
+          const toggleExportEmployee = (id) => {
+            setExportSelected((prev) => ({ ...prev, [id]: !prev[id] }));
+          };
+
+          const toggleExportAll = () => {
+            const allOn = employees.every((emp) => exportSelected[emp.id]);
+            const next = {};
+            employees.forEach((emp) => { next[emp.id] = !allOn; });
+            setExportSelected(next);
+          };
+
+          const generateExcelReport = async () => {
+            const chosen = employees.filter((emp) => exportSelected[emp.id]);
+            if (chosen.length === 0) {
+              setExportMsg('Выберите хотя бы одного сотрудника');
+              setTimeout(() => setExportMsg(''), 2500);
+              return;
+            }
+            setExportBusy(true);
+            setExportMsg('');
+            try {
+              const [start, end] = getRange(exportPeriod, exportStart, exportEnd);
+              const rows = [];
+              const summary = [];
+              const shiftRows = [];
+              for (const emp of chosen) {
+                const list = await getJSON(`shop:entries:${emp.id}`, true, []);
+                const filtered = list.filter((e) => e.ts >= start && e.ts <= end);
+                filtered.forEach((e) => {
+                  const op = OPS.find((o) => o.id === e.opId);
+                  rows.push({
+                    'Дата': new Date(e.ts).toLocaleDateString('ru-RU'),
+                    'Время': new Date(e.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+                    'Сотрудник': emp.name,
+                    'Заказ': e.order,
+                    'Операция': op ? op.name : e.opId,
+                    'Количество': e.qty,
+                    'Ед.': op ? op.unit : '',
+                    'Время на операцию': e.durationSec != null ? formatHMS(e.durationSec) : '',
+                    'Сумма, ₽': Math.round(e.amount),
+                  });
+                });
+                summary.push({
+                  'Сотрудник': emp.name,
+                  'Операций': filtered.length,
+                  'Сумма, ₽': Math.round(filtered.reduce((s, e) => s + e.amount, 0)),
+                });
+
+                const shiftList = await getJSON(`shop:shifts:${emp.id}`, true, []);
+                const filteredShifts = shiftList.filter((s) => s.startTs >= start && s.startTs <= end);
+                filteredShifts.forEach((s) => {
+                  const durSec = s.endTs ? Math.round((s.endTs - s.startTs) / 1000) : null;
+                  shiftRows.push({
+                    'Сотрудник': emp.name,
+                    'Дата': new Date(s.startTs).toLocaleDateString('ru-RU'),
+                    'Начало': formatTime(s.startTs),
+                    'Конец': s.endTs ? formatTime(s.endTs) : 'не завершена',
+                    'Длительность': durSec != null ? formatHMS(durSec) : '—',
+                  });
+                });
+              }
+              rows.sort((a, b) => (a['Дата'] + a['Время']).localeCompare(b['Дата'] + b['Время']));
+              shiftRows.sort((a, b) => (a['Дата'] + a['Начало']).localeCompare(b['Дата'] + b['Начало']));
+              summary.push({
+                'Сотрудник': 'ИТОГО',
+                'Операций': summary.reduce((s, r) => s + r['Операций'], 0),
+                'Сумма, ₽': summary.reduce((s, r) => s + r['Сумма, ₽'], 0),
+              });
+
+              const wb = XLSX.utils.book_new();
+              const wsSummary = XLSX.utils.json_to_sheet(summary);
+              wsSummary['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
+              XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка');
+
+              const wsRows = XLSX.utils.json_to_sheet(rows);
+              wsRows['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 7 }, { wch: 14 }, { wch: 11 }];
+              XLSX.utils.book_append_sheet(wb, wsRows, 'Операции');
+
+              const wsShifts = XLSX.utils.json_to_sheet(shiftRows);
+              wsShifts['!cols'] = [{ wch: 20 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 14 }];
+              XLSX.utils.book_append_sheet(wb, wsShifts, 'Смены');
+
+              const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+              const blob = new Blob([wbout], { type: 'application/octet-stream' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              const periodLabel = exportPeriod === 'custom' ? `${exportStart}_${exportEnd}` : exportPeriod;
+              a.href = url;
+              a.download = `отчет_цех_${periodLabel}.xlsx`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              setExportMsg(rows.length ? '✅ Файл скачан' : '✅ Файл скачан (данных за период не найдено)');
+            } catch (e) {
+              setExportMsg('❌ Не получилось сформировать файл');
+            }
+            setExportBusy(false);
+            setTimeout(() => setExportMsg(''), 3000);
+          };
+
           const saveRates = async () => {
             setRates(editRates);
             await setJSON('shop:rates', true, editRates);
-            setSaveMsg('Расценки сохранены');
+            setSaveMsg('✅ Расценки сохранены');
             setTimeout(() => setSaveMsg(''), 2000);
           };
-        
+
           // === СТИЛИ ===
           const bg = '#1c1f22';
           const panel = '#262b30';
@@ -321,7 +513,7 @@
           const accentDim = 'rgba(255,106,43,0.16)';
           const good = '#4caf7d';
           const bad = '#e5484d';
-        
+
           const styles = {
             root: {
               background: bg,
@@ -331,6 +523,17 @@
               maxWidth: 460,
               margin: '0 auto',
               padding: 16,
+              position: 'relative',
+            },
+            companyLabel: {
+              position: 'absolute',
+              top: 14,
+              right: 16,
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: '0.03em',
+              color: textDim,
+              zIndex: 1,
             },
             header: {
               padding: '10px 0',
@@ -395,15 +598,16 @@
               fontVariantNumeric: 'tabular-nums',
             },
           };
-        
+
           if (booting) {
-            return <div style={styles.root}><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Загрузка...</div></div>;
+            return <div style={styles.root}><div style={styles.companyLabel}>{COMPANY_NAME}</div><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Загрузка...</div></div>;
           }
-        
+
           // === ЭКРАН ВЫБОРА СОТРУДНИКА ===
           if (screen === 'select') {
             return (
               <div style={styles.root}>
+                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
                   <div>
                     <div style={styles.eyebrow}>Цех · учёт операций</div>
@@ -448,11 +652,12 @@
               </div>
             );
           }
-        
+
           // === ЭКРАН PIN ===
           if (screen === 'pin') {
             return (
               <div style={styles.root}>
+                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
                   <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setPinError(false); setPinInput(''); }}>
                     ←
@@ -477,11 +682,12 @@
               </div>
             );
           }
-        
+
           // === ЭКРАН СОТРУДНИКА ===
           if (screen === 'employee' && currentEmployee) {
             return (
               <div style={styles.root}>
+                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
                   <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setCurrentEmployee(null); setOrder(''); }}>
                     ←
@@ -492,7 +698,7 @@
                   </div>
                   <div style={{ width: 30 }} />
                 </div>
-        
+
                 <div style={styles.body}>
                   {/* Блок смены */}
                   <div style={{
@@ -520,14 +726,14 @@
                       {currentShift ? '🚪 Закончить' : '🚪 Начать'}
                     </button>
                   </div>
-        
+
                   <input
                     style={{ ...styles.input, marginBottom: 12 }}
                     placeholder="Номер заказа"
                     value={order}
                     onChange={(e) => setOrder(e.target.value)}
                   />
-        
+
                   {/* Список операций */}
                   {!openOp && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -539,7 +745,7 @@
                       ))}
                     </div>
                   )}
-        
+
                   {/* Окно операции */}
                   {openOp && (
                     <div style={{ ...styles.card, marginTop: 12 }}>
@@ -547,7 +753,31 @@
                         <span style={{ fontWeight: 700, fontSize: 16 }}>{openOp.name}</span>
                         <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setOpenOp(null)}>✕</button>
                       </div>
-        
+
+                      {/* Таймер */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        background: panelAlt, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 10.5, color: textDim }}>⏱ Время на операцию</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, ...styles.money }}>
+                            {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '—'}
+                          </div>
+                        </div>
+                        <button
+                          style={{
+                            ...styles.button, width: 'auto', padding: '6px 12px',
+                            background: !opStartTs || opEndTs ? accentDim : 'rgba(229,72,77,0.14)',
+                            border: `1px solid ${!opStartTs || opEndTs ? accent : bad}`,
+                            color: !opStartTs || opEndTs ? accent : bad,
+                          }}
+                          onClick={toggleOpTimer}
+                        >
+                          {!opStartTs ? '▶' : !opEndTs ? '⏸' : '⟳'}
+                        </button>
+                      </div>
+
                       {/* Размер */}
                       {openOp.hasSize && (
                         <div style={{ marginBottom: 12 }}>
@@ -564,7 +794,7 @@
                           </div>
                         </div>
                       )}
-        
+
                       {/* Сложность */}
                       {openOp.hasComplexity && (
                         <div style={{ marginBottom: 12 }}>
@@ -581,7 +811,7 @@
                           </div>
                         </div>
                       )}
-        
+
                       {/* Количество */}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Количество, {openOp.unit}</div>
@@ -595,7 +825,7 @@
                           </button>
                         </div>
                       </div>
-        
+
                       {/* Сумма */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${border}`, paddingTop: 10, marginBottom: 12 }}>
                         <span style={{ fontSize: 13, color: textDim }}>Начислится</span>
@@ -603,11 +833,11 @@
                           +{money(calcAmount(openOp, rates, qty, size, complexity))}
                         </span>
                       </div>
-        
+
                       <button style={styles.primaryButton} onClick={confirmEntry}>✅ Добавить запись</button>
                     </div>
                   )}
-        
+
                   {/* Записи за сегодня */}
                   <div style={{ marginTop: 18 }}>
                     <div style={{ ...styles.eyebrow, marginBottom: 8 }}>{todayLabel} · {todayEntries.length} записей</div>
@@ -621,6 +851,8 @@
                               <div style={{ fontSize: 11, color: textDim }}>
                                 Заказ {e.order} · {e.qty} {op ? op.unit : ''}
                                 {e.size ? `, ${SIZE_LABELS[e.size]}` : ''}
+                                {e.complexity && e.complexity !== 'normal' ? `, ${COMPLEXITY_LABELS[e.complexity]}` : ''}
+                                {e.durationSec != null ? ` · ${formatDuration(e.durationSec)}` : ''}
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -639,11 +871,12 @@
               </div>
             );
           }
-        
+
           // === ЭКРАН РУКОВОДИТЕЛЯ ===
           if (screen === 'manager') {
             return (
               <div style={styles.root}>
+                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
                   <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setScreen('select')}>←</button>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -652,9 +885,9 @@
                   </div>
                   <div style={{ width: 30 }} />
                 </div>
-        
+
                 <div style={{ display: 'flex', borderBottom: `1px solid ${border}`, marginBottom: 12 }}>
-                  {[['totals', 'Сводка'], ['rates', 'Расценки']].map(([id, label]) => (
+                  {[['totals', 'Сводка'], ['export', 'В Excel'], ['rates', 'Расценки']].map(([id, label]) => (
                     <button key={id} onClick={() => setManagerTab(id)} style={{
                       flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer',
                       color: managerTab === id ? accent : textDim,
@@ -663,7 +896,7 @@
                     }}>{label}</button>
                   ))}
                 </div>
-        
+
                 {managerTab === 'totals' && (
                   <div>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -676,9 +909,9 @@
                         }}>{label}</button>
                       ))}
                     </div>
-        
+
                     {managerLoading && <div style={{ color: textDim, textAlign: 'center', padding: 20 }}>Загрузка...</div>}
-        
+
                     {employees.map((emp) => {
                       const d = managerData[emp.id] || { entries: [], total: 0 };
                       return (
@@ -691,7 +924,7 @@
                         </div>
                       );
                     })}
-        
+
                     {employees.length > 0 && (
                       <div style={{ ...styles.card, background: panelAlt, marginTop: 8 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -702,13 +935,75 @@
                         </div>
                       </div>
                     )}
-        
+
                     <button style={{ ...styles.button, marginTop: 10, justifyContent: 'center', fontSize: 12 }} onClick={loadManagerData}>
                       🔄 Обновить
                     </button>
                   </div>
                 )}
-        
+
+                {managerTab === 'export' && (
+                  <div>
+                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Сотрудники</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                      <button style={{ ...styles.button, padding: '8px 12px', fontSize: 12.5, color: textDim, justifyContent: 'space-between' }} onClick={toggleExportAll}>
+                        Выбрать всех / снять всех
+                        <span>✅</span>
+                      </button>
+                      {employees.map((emp) => {
+                        const checked = !!exportSelected[emp.id];
+                        return (
+                          <button key={emp.id} onClick={() => toggleExportEmployee(emp.id)} style={{
+                            ...styles.button, justifyContent: 'space-between',
+                            border: `1px solid ${checked ? accent : border}`,
+                            background: checked ? accentDim : panelAlt,
+                            color: checked ? accent : text,
+                          }}>
+                            {emp.name}
+                            {checked && <span>✅</span>}
+                          </button>
+                        );
+                      })}
+                      {employees.length === 0 && <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>}
+                    </div>
+
+                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Период</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+                      {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время'], ['custom', 'Свой период']].map(([id, label]) => (
+                        <button key={id} onClick={() => setExportPeriod(id)} style={{
+                          padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                          border: `1px solid ${exportPeriod === id ? accent : border}`,
+                          background: exportPeriod === id ? accentDim : panelAlt,
+                          color: exportPeriod === id ? accent : text,
+                        }}>{label}</button>
+                      ))}
+                    </div>
+
+                    {exportPeriod === 'custom' && (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>С</div>
+                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>По</div>
+                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+
+                    <button style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={generateExcelReport} disabled={exportBusy}>
+                      {exportBusy ? '⏳' : '📊'}
+                      {exportBusy ? 'Формирую...' : 'Сформировать отчёт'}
+                    </button>
+                    {exportMsg && (
+                      <div style={{ color: exportMsg.includes('✅') ? good : textDim, fontSize: 13, marginTop: 10, textAlign: 'center' }}>
+                        {exportMsg}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {managerTab === 'rates' && editRates && (
                   <div>
                     <div style={{ fontSize: 12, color: textDim, marginBottom: 12 }}>Изменение расценок — только для новых записей.</div>
@@ -774,10 +1069,10 @@
               </div>
             );
           }
-        
-          return <div style={styles.root}><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Ошибка загрузки</div></div>;
+
+          return <div style={styles.root}><div style={styles.companyLabel}>{COMPANY_NAME}</div><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Ошибка загрузки</div></div>;
         }
-        
+
         // === ЗАПУСК ===
         ReactDOM.createRoot(document.getElementById('root')).render(<ShopFloorApp />);
     </script>
