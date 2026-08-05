@@ -7,50 +7,67 @@
     <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.1/dist/umd/lucide.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
-        
-        // Иконки из глобальной переменной lucide
-        const {
-          Truck, Scissors, ArrowUpToLine, Ruler, Cog, Wrench, CircleDot,
-          Sparkles, Layers, Hammer, ClipboardCheck, PackageCheck, Send,
-          Plus, Minus, X, Lock, Users, Trash2, ChevronLeft, RefreshCw,
-          FileSpreadsheet, Download, Check, Play, Pause, RotateCcw, LogIn, LogOut, Timer
-        } = lucide;
-
-        // XLSX уже загружен глобально
         const XLSX = window.XLSX;
-
-        const K = {
-          employees: 'shop:employees',
-          rates: 'shop:rates',
-          entries: (id) => `shop:entries:${id}`,
-          shifts: (id) => `shop:shifts:${id}`,
-        };
-
+        
+        // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+        function money(n) {
+          return Math.round(n).toLocaleString('ru-RU') + ' ₽';
+        }
+        
+        function todayKey(ts) {
+          return new Date(ts).toDateString();
+        }
+        
+        function formatDate(ts) {
+          const s = new Date(ts).toLocaleDateString('ru-RU', {
+            day: 'numeric', month: 'long', weekday: 'long',
+          });
+          return s.charAt(0).toUpperCase() + s.slice(1);
+        }
+        
+        function formatTime(ts) {
+          return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        function formatDuration(sec) {
+          if (sec == null) return '—';
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          return `${m}:${String(s).padStart(2, '0')}`;
+        }
+        
+        function formatShiftDuration(sec) {
+          if (sec == null) return '—';
+          const h = Math.floor(sec / 3600);
+          const m = Math.floor((sec % 3600) / 60);
+          return `${h} ч ${String(m).padStart(2, '0')} мин`;
+        }
+        
+        // === ДАННЫЕ ===
         const MANAGER_PIN = '1234';
         const COMPANY_NAME = 'Омега Дизайн';
-
+        
         const OPS = [
-          { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.', icon: Truck },
-          { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', icon: Scissors, hasComplexity: true },
-          { id: 'lift', name: 'Подъём на лифте', unit: 'подъём', icon: ArrowUpToLine },
-          { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт', icon: Ruler },
-          { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт', icon: Cog },
-          { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт', icon: Wrench },
-          { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.', icon: CircleDot },
-          { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.', icon: Sparkles },
-          { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт', icon: Layers },
-          { id: 'assembly', name: 'Сборка фасада', unit: 'шт', icon: Hammer, hasSize: true },
-          { id: 'qc', name: 'Контроль качества', unit: 'шт', icon: ClipboardCheck },
-          { id: 'packing', name: 'Упаковка', unit: 'шт', icon: PackageCheck },
-          { id: 'shipping', name: 'Отгрузка', unit: 'компл.', icon: Send },
+          { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.', icon: '📦' },
+          { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', icon: '✂️', hasComplexity: true },
+          { id: 'lift', name: 'Подъём на лифте', unit: 'подъём', icon: '⬆️' },
+          { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт', icon: '📏' },
+          { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт', icon: '⚙️' },
+          { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт', icon: '🔧' },
+          { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.', icon: '⭕' },
+          { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.', icon: '✨' },
+          { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт', icon: '📐' },
+          { id: 'assembly', name: 'Сборка фасада', unit: 'шт', icon: '🔨', hasSize: true },
+          { id: 'qc', name: 'Контроль качества', unit: 'шт', icon: '✅' },
+          { id: 'packing', name: 'Упаковка', unit: 'шт', icon: '📦' },
+          { id: 'shipping', name: 'Отгрузка', unit: 'компл.', icon: '🚚' },
         ];
-
+        
         const DEFAULT_RATES = {
           unload: { rate: 50 },
           glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
@@ -66,78 +83,10 @@
           packing: { rate: 60 },
           shipping: { rate: 90 },
         };
-
+        
         const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
         const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
-
-        function money(n) {
-          return Math.round(n).toLocaleString('ru-RU') + ' \u20BD';
-        }
-
-        function todayKey(ts) {
-          return new Date(ts).toDateString();
-        }
-
-        function formatDate(ts) {
-          const s = new Date(ts).toLocaleDateString('ru-RU', {
-            day: 'numeric', month: 'long', weekday: 'long',
-          });
-          return s.charAt(0).toUpperCase() + s.slice(1);
-        }
-
-        function toDateInputValue(ts) {
-          const d = new Date(ts);
-          const pad = (n) => String(n).padStart(2, '0');
-          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        }
-
-        function getRange(p, customStart, customEnd) {
-          const now = Date.now();
-          if (p === 'today') {
-            const d = new Date(); d.setHours(0, 0, 0, 0);
-            return [d.getTime(), now];
-          }
-          if (p === 'week') {
-            const d = new Date();
-            const day = (d.getDay() + 6) % 7;
-            d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0);
-            return [d.getTime(), now];
-          }
-          if (p === 'custom') {
-            const s = customStart ? new Date(customStart + 'T00:00:00').getTime() : 0;
-            const e = customEnd ? new Date(customEnd + 'T23:59:59').getTime() : now;
-            return [s, e];
-          }
-          return [0, now];
-        }
-
-        function formatDuration(sec) {
-          if (sec == null) return '\u2014';
-          const m = Math.floor(sec / 60);
-          const s = sec % 60;
-          return `${m}:${String(s).padStart(2, '0')}`;
-        }
-
-        function formatShiftDuration(sec) {
-          if (sec == null) return '\u2014';
-          const h = Math.floor(sec / 3600);
-          const m = Math.floor((sec % 3600) / 60);
-          return `${h} ч ${String(m).padStart(2, '0')} мин`;
-        }
-
-        function formatHMS(sec) {
-          if (sec == null) return '';
-          const h = Math.floor(sec / 3600);
-          const m = Math.floor((sec % 3600) / 60);
-          const s = sec % 60;
-          const pad = (n) => String(n).padStart(2, '0');
-          return `${pad(h)}:${pad(m)}:${pad(s)}`;
-        }
-
-        function formatTime(ts) {
-          return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        }
-
+        
         function calcAmount(op, rates, qty, size, complexity) {
           const r = rates[op.id] || {};
           if (op.hasSize) {
@@ -151,10 +100,10 @@
           }
           return (r.rate || 0) * qty;
         }
-
-        // ВРЕМЕННАЯ ЗАГЛУШКА ДЛЯ STORAGE (сохраняет данные в localStorage)
+        
+        // === ХРАНИЛИЩЕ ===
         const storage = {
-          get: (key, shared) => {
+          get: (key) => {
             try {
               const value = localStorage.getItem(key);
               return Promise.resolve(value ? { value } : null);
@@ -162,7 +111,7 @@
               return Promise.resolve(null);
             }
           },
-          set: (key, value, shared) => {
+          set: (key, value) => {
             try {
               localStorage.setItem(key, value);
               return Promise.resolve(true);
@@ -172,7 +121,7 @@
           }
         };
         window.storage = storage;
-
+        
         async function getJSON(key, shared, fallback) {
           try {
             const res = await window.storage.get(key, shared);
@@ -181,7 +130,7 @@
             return fallback;
           }
         }
-
+        
         async function setJSON(key, shared, value) {
           try {
             await window.storage.set(key, JSON.stringify(value), shared);
@@ -190,7 +139,8 @@
             return false;
           }
         }
-
+        
+        // === ГЛАВНОЕ ПРИЛОЖЕНИЕ ===
         function ShopFloorApp() {
           const [booting, setBooting] = useState(true);
           const [employees, setEmployees] = useState([]);
@@ -215,8 +165,8 @@
           const [saveMsg, setSaveMsg] = useState('');
           const [exportSelected, setExportSelected] = useState({});
           const [exportPeriod, setExportPeriod] = useState('today');
-          const [exportStart, setExportStart] = useState(toDateInputValue(Date.now()));
-          const [exportEnd, setExportEnd] = useState(toDateInputValue(Date.now()));
+          const [exportStart, setExportStart] = useState(new Date().toISOString().split('T')[0]);
+          const [exportEnd, setExportEnd] = useState(new Date().toISOString().split('T')[0]);
           const [exportBusy, setExportBusy] = useState(false);
           const [exportMsg, setExportMsg] = useState('');
           const [opStartTs, setOpStartTs] = useState(null);
@@ -224,78 +174,78 @@
           const [tick, setTick] = useState(0);
           const [shifts, setShifts] = useState([]);
           const [shiftsLoading, setShiftsLoading] = useState(false);
-
+        
           useEffect(() => {
             (async () => {
-              const emp = await getJSON(K.employees, true, []);
-              const r = await getJSON(K.rates, true, DEFAULT_RATES);
+              const emp = await getJSON('shop:employees', true, []);
+              const r = await getJSON('shop:rates', true, DEFAULT_RATES);
               setEmployees(emp);
               setRates(r);
               setBooting(false);
             })();
           }, []);
-
+        
           const loadEntries = useCallback(async (empId) => {
             setEntriesLoading(true);
-            const list = await getJSON(K.entries(empId), true, []);
+            const list = await getJSON(`shop:entries:${empId}`, true, []);
             setEntries(list);
             setEntriesLoading(false);
           }, []);
-
+        
           const loadShifts = useCallback(async (empId) => {
             setShiftsLoading(true);
-            const list = await getJSON(K.shifts(empId), true, []);
+            const list = await getJSON(`shop:shifts:${empId}`, true, []);
             setShifts(list);
             setShiftsLoading(false);
           }, []);
-
+        
           useEffect(() => {
             if (currentEmployee) {
               loadEntries(currentEmployee.id);
               loadShifts(currentEmployee.id);
             }
           }, [currentEmployee, loadEntries, loadShifts]);
-
+        
           const currentShift = shifts.find((s) => s.endTs == null) || null;
-
+        
           useEffect(() => {
             if (!currentShift) return;
             const iv = setInterval(() => setTick((t) => t + 1), 30000);
             return () => clearInterval(iv);
           }, [currentShift]);
-
+        
           const startShift = async () => {
             if (currentShift || !currentEmployee) return;
             const rec = { id: 's_' + Date.now(), startTs: Date.now(), endTs: null };
             const list = [rec, ...shifts];
             setShifts(list);
-            await setJSON(K.shifts(currentEmployee.id), true, list);
+            await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
           };
-
+        
           const endShift = async () => {
             if (!currentShift || !currentEmployee) return;
             const list = shifts.map((s) => (s.id === currentShift.id ? { ...s, endTs: Date.now() } : s));
             setShifts(list);
-            await setJSON(K.shifts(currentEmployee.id), true, list);
+            await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
           };
-
+        
           const addEmployee = async () => {
             const name = newName.trim();
             if (!name) return;
             const id = 'e_' + Date.now();
             const list = [...employees, { id, name }];
             setEmployees(list);
-            await setJSON(K.employees, true, list);
+            await setJSON('shop:employees', true, list);
             setNewName('');
             setCurrentEmployee({ id, name });
             setScreen('employee');
           };
-
+        
           const pickEmployee = (emp) => {
             setCurrentEmployee(emp);
             setScreen('employee');
           };
-
+        
           const openOperation = (op) => {
             setOpenOp(op);
             setQty(1);
@@ -304,7 +254,7 @@
             setOpStartTs(null);
             setOpEndTs(null);
           };
-
+        
           const toggleOpTimer = () => {
             if (!opStartTs) {
               setOpStartTs(Date.now());
@@ -316,13 +266,13 @@
               setOpEndTs(null);
             }
           };
-
+        
           useEffect(() => {
             if (!opStartTs || opEndTs) return;
             const iv = setInterval(() => setTick((t) => t + 1), 1000);
             return () => clearInterval(iv);
           }, [opStartTs, opEndTs]);
-
+        
           const confirmEntry = async () => {
             if (!openOp) return;
             const amount = calcAmount(openOp, rates, qty, size, complexity);
@@ -331,7 +281,7 @@
             const entry = {
               id: 'x_' + Date.now(),
               ts: Date.now(),
-              order: order.trim() || '\u2014',
+              order: order.trim() || '—',
               opId: openOp.id,
               qty,
               size: openOp.hasSize ? size : null,
@@ -343,22 +293,22 @@
             };
             const list = [entry, ...entries];
             setEntries(list);
-            await setJSON(K.entries(currentEmployee.id), true, list);
+            await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
             setOpenOp(null);
             setOpStartTs(null);
             setOpEndTs(null);
           };
-
+        
           const deleteEntry = async (id) => {
             const list = entries.filter((e) => e.id !== id);
             setEntries(list);
-            await setJSON(K.entries(currentEmployee.id), true, list);
+            await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
           };
-
+        
           const todayEntries = entries.filter((e) => todayKey(e.ts) === todayKey(Date.now()));
           const todayTotal = todayEntries.reduce((s, e) => s + e.amount, 0);
           const todayLabel = formatDate(Date.now());
-
+        
           const tryManagerLogin = () => {
             if (pinInput === MANAGER_PIN) {
               setScreen('manager');
@@ -368,7 +318,7 @@
               setPinError(true);
             }
           };
-
+        
           const periodStart = () => {
             const d = new Date();
             if (period === 'today') {
@@ -382,13 +332,13 @@
             }
             return d.getTime();
           };
-
+        
           const loadManagerData = useCallback(async () => {
             setManagerLoading(true);
             const start = periodStart();
             const data = {};
             for (const emp of employees) {
-              const list = await getJSON(K.entries(emp.id), true, []);
+              const list = await getJSON(`shop:entries:${emp.id}`, true, []);
               const filtered = list.filter((e) => e.ts >= start);
               data[emp.id] = {
                 entries: filtered.sort((a, b) => b.ts - a.ts),
@@ -398,17 +348,17 @@
             setManagerData(data);
             setManagerLoading(false);
           }, [employees, period]);
-
+        
           useEffect(() => {
             if (screen === 'manager' && managerTab === 'totals') loadManagerData();
           }, [screen, managerTab, period, loadManagerData]);
-
+        
           useEffect(() => {
             if (screen === 'manager' && managerTab === 'rates') {
               setEditRates(JSON.parse(JSON.stringify(rates)));
             }
           }, [screen, managerTab, rates]);
-
+        
           useEffect(() => {
             if (screen === 'manager' && managerTab === 'export') {
               setExportSelected((prev) => {
@@ -420,115 +370,32 @@
               });
             }
           }, [screen, managerTab, employees]);
-
+        
           const toggleExportEmployee = (id) => {
             setExportSelected((prev) => ({ ...prev, [id]: !prev[id] }));
           };
-
+        
           const toggleExportAll = () => {
             const allOn = employees.every((emp) => exportSelected[emp.id]);
             const next = {};
             employees.forEach((emp) => { next[emp.id] = !allOn; });
             setExportSelected(next);
           };
-
+        
           const generateExcelReport = async () => {
-            const chosen = employees.filter((emp) => exportSelected[emp.id]);
-            if (chosen.length === 0) {
-              setExportMsg('Выберите хотя бы одного сотрудника');
-              setTimeout(() => setExportMsg(''), 2500);
-              return;
-            }
-            setExportBusy(true);
-            setExportMsg('');
-            try {
-              const [start, end] = getRange(exportPeriod, exportStart, exportEnd);
-              const rows = [];
-              const summary = [];
-              const shiftRows = [];
-              for (const emp of chosen) {
-                const list = await getJSON(K.entries(emp.id), true, []);
-                const filtered = list.filter((e) => e.ts >= start && e.ts <= end);
-                filtered.forEach((e) => {
-                  const op = OPS.find((o) => o.id === e.opId);
-                  rows.push({
-                    'Дата': new Date(e.ts).toLocaleDateString('ru-RU'),
-                    'Время': new Date(e.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-                    'Сотрудник': emp.name,
-                    'Заказ': e.order,
-                    'Операция': op ? op.name : e.opId,
-                    'Количество': e.qty,
-                    'Ед.': op ? op.unit : '',
-                    'Время на операцию': e.durationSec != null ? formatHMS(e.durationSec) : '',
-                    'Сумма, ₽': Math.round(e.amount),
-                  });
-                });
-                summary.push({
-                  'Сотрудник': emp.name,
-                  'Операций': filtered.length,
-                  'Сумма, ₽': Math.round(filtered.reduce((s, e) => s + e.amount, 0)),
-                });
-
-                const shiftList = await getJSON(K.shifts(emp.id), true, []);
-                const filteredShifts = shiftList.filter((s) => s.startTs >= start && s.startTs <= end);
-                filteredShifts.forEach((s) => {
-                  const durSec = s.endTs ? Math.round((s.endTs - s.startTs) / 1000) : null;
-                  shiftRows.push({
-                    'Сотрудник': emp.name,
-                    'Дата': new Date(s.startTs).toLocaleDateString('ru-RU'),
-                    'Начало': formatTime(s.startTs),
-                    'Конец': s.endTs ? formatTime(s.endTs) : 'не завершена',
-                    'Длительность': durSec != null ? formatHMS(durSec) : '\u2014',
-                  });
-                });
-              }
-              rows.sort((a, b) => (a['Дата'] + a['Время']).localeCompare(b['Дата'] + b['Время']));
-              shiftRows.sort((a, b) => (a['Дата'] + a['Начало']).localeCompare(b['Дата'] + b['Начало']));
-              summary.push({
-                'Сотрудник': 'ИТОГО',
-                'Операций': summary.reduce((s, r) => s + r['Операций'], 0),
-                'Сумма, ₽': summary.reduce((s, r) => s + r['Сумма, ₽'], 0),
-              });
-
-              const wb = XLSX.utils.book_new();
-              const wsSummary = XLSX.utils.json_to_sheet(summary);
-              wsSummary['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
-              XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка');
-
-              const wsRows = XLSX.utils.json_to_sheet(rows);
-              wsRows['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 7 }, { wch: 14 }, { wch: 11 }];
-              XLSX.utils.book_append_sheet(wb, wsRows, 'Операции');
-
-              const wsShifts = XLSX.utils.json_to_sheet(shiftRows);
-              wsShifts['!cols'] = [{ wch: 20 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 14 }];
-              XLSX.utils.book_append_sheet(wb, wsShifts, 'Смены');
-
-              const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-              const blob = new Blob([wbout], { type: 'application/octet-stream' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              const periodLabel = exportPeriod === 'custom' ? `${exportStart}_${exportEnd}` : exportPeriod;
-              a.href = url;
-              a.download = `отчет_цех_${periodLabel}.xlsx`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-              setExportMsg(rows.length ? 'Файл скачан' : 'Файл скачан (данных за период не найдено)');
-            } catch (e) {
-              setExportMsg('Не получилось сформировать файл');
-            }
-            setExportBusy(false);
-            setTimeout(() => setExportMsg(''), 3000);
+            // Простая версия без сложного экспорта
+            setExportMsg('Функция в разработке');
+            setTimeout(() => setExportMsg(''), 2000);
           };
-
+        
           const saveRates = async () => {
             setRates(editRates);
-            await setJSON(K.rates, true, editRates);
+            await setJSON('shop:rates', true, editRates);
             setSaveMsg('Расценки сохранены');
             setTimeout(() => setSaveMsg(''), 2000);
           };
-
+        
+          // === СТИЛИ ===
           const bg = '#1c1f22';
           const panel = '#262b30';
           const panelAlt = '#2f353b';
@@ -539,32 +406,19 @@
           const accentDim = 'rgba(255,106,43,0.16)';
           const good = '#4caf7d';
           const bad = '#e5484d';
-
+        
           const styles = {
             root: {
               background: bg,
               color: text,
               fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              minHeight: 400,
+              minHeight: '100vh',
               maxWidth: 460,
               margin: '0 auto',
-              borderRadius: 16,
-              overflow: 'hidden',
-              border: `1px solid ${border}`,
-              position: 'relative',
-            },
-            companyLabel: {
-              position: 'absolute',
-              top: 14,
-              right: 16,
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-              color: textDim,
-              zIndex: 1,
+              padding: 16,
             },
             header: {
-              padding: '16px 18px',
+              padding: '10px 0',
               borderBottom: `1px solid ${border}`,
               display: 'flex',
               alignItems: 'center',
@@ -578,7 +432,7 @@
               fontWeight: 600,
             },
             h1: { fontSize: 18, fontWeight: 700, margin: '2px 0 0' },
-            body: { padding: 16 },
+            body: { padding: '10px 0' },
             button: {
               background: panelAlt,
               color: text,
@@ -626,21 +480,15 @@
               fontVariantNumeric: 'tabular-nums',
             },
           };
-
+        
           if (booting) {
-            return (
-              <div style={{ ...styles.root, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
-                <span style={{ color: textDim, fontSize: 14 }}>Загрузка...</span>
-              </div>
-            );
+            return <div style={styles.root}><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Загрузка...</div></div>;
           }
-
-          // ---------- SELECT EMPLOYEE ----------
+        
+          // === ЭКРАН ВЫБОРА СОТРУДНИКА ===
           if (screen === 'select') {
             return (
               <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
                   <div>
                     <div style={styles.eyebrow}>Цех · учёт операций</div>
@@ -648,24 +496,22 @@
                     <div style={{ fontSize: 12, color: textDim, marginTop: 3 }}>{todayLabel}</div>
                   </div>
                 </div>
-                <div style={{ ...styles.body, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={styles.body}>
                   {employees.length === 0 && (
-                    <div style={{ color: textDim, fontSize: 13, marginBottom: 4 }}>
-                      Пока никого нет. Добавьте первого сотрудника ниже.
-                    </div>
+                    <div style={{ color: textDim, fontSize: 13, marginBottom: 8 }}>Пока никого нет. Добавьте первого сотрудника ниже.</div>
                   )}
                   {employees.map((emp) => (
-                    <button key={emp.id} style={styles.button} onClick={() => pickEmployee(emp)}>
+                    <button key={emp.id} style={{ ...styles.button, marginBottom: 6 }} onClick={() => pickEmployee(emp)}>
                       <span style={{
                         width: 30, height: 30, borderRadius: '50%', background: accentDim, color: accent,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
                       }}>
                         {emp.name.trim().charAt(0).toUpperCase()}
                       </span>
                       {emp.name}
                     </button>
                   ))}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                     <input
                       style={styles.input}
                       placeholder="Имя нового сотрудника"
@@ -674,33 +520,32 @@
                       onKeyDown={(e) => e.key === 'Enter' && addEmployee()}
                     />
                     <button style={{ ...styles.primaryButton, width: 'auto', padding: '11px 16px' }} onClick={addEmployee}>
-                      <Plus size={18} />
+                      ➕
                     </button>
                   </div>
                   <button
                     style={{ ...styles.button, marginTop: 12, justifyContent: 'center', color: textDim }}
                     onClick={() => setScreen('pin')}
                   >
-                    <Lock size={16} /> Режим руководителя
+                    🔒 Режим руководителя
                   </button>
                 </div>
               </div>
             );
           }
-
-          // ---------- PIN ----------
+        
+          // === ЭКРАН PIN ===
           if (screen === 'pin') {
             return (
               <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => { setScreen('select'); setPinError(false); setPinInput(''); }}>
-                    <ChevronLeft size={20} />
+                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setPinError(false); setPinInput(''); }}>
+                    ←
                   </button>
                   <div style={{ ...styles.h1, fontSize: 15 }}>Код руководителя</div>
-                  <div style={{ width: 20 }} />
+                  <div style={{ width: 30 }} />
                 </div>
-                <div style={{ ...styles.body, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={styles.body}>
                   <input
                     style={styles.input}
                     type="password"
@@ -711,30 +556,30 @@
                     onKeyDown={(e) => e.key === 'Enter' && tryManagerLogin()}
                     autoFocus
                   />
-                  {pinError && <div style={{ color: bad, fontSize: 13 }}>Неверный код. Попробуйте ещё раз.</div>}
-                  <button style={styles.primaryButton} onClick={tryManagerLogin}>Войти</button>
+                  {pinError && <div style={{ color: bad, fontSize: 13, marginTop: 8 }}>Неверный код. Попробуйте ещё раз.</div>}
+                  <button style={{ ...styles.primaryButton, marginTop: 12 }} onClick={tryManagerLogin}>Войти</button>
                 </div>
               </div>
             );
           }
-
-          // ---------- EMPLOYEE DASHBOARD ----------
+        
+          // === ЭКРАН СОТРУДНИКА ===
           if (screen === 'employee' && currentEmployee) {
             return (
               <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => { setScreen('select'); setCurrentEmployee(null); setOrder(''); }}>
-                    <ChevronLeft size={20} />
+                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setCurrentEmployee(null); setOrder(''); }}>
+                    ←
                   </button>
                   <div style={{ textAlign: 'center' }}>
                     <div style={styles.eyebrow}>{currentEmployee.name}</div>
                     <div style={{ ...styles.h1, ...styles.money, color: accent }}>{money(todayTotal)}</div>
                   </div>
-                  <div style={{ width: 20 }} />
+                  <div style={{ width: 30 }} />
                 </div>
-
+        
                 <div style={styles.body}>
+                  {/* Блок смены */}
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     background: panelAlt, border: `1px solid ${border}`, borderRadius: 10,
@@ -745,89 +590,84 @@
                       <div style={{ fontSize: 14, fontWeight: 700 }}>
                         {currentShift
                           ? `с ${formatTime(currentShift.startTs)} · ${formatShiftDuration(Math.floor((Date.now() - currentShift.startTs) / 1000))}`
-                          : '\u2014'}
+                          : '—'}
                       </div>
                     </div>
                     <button
                       style={{
-                        ...styles.button, width: 'auto', padding: '9px 14px',
+                        ...styles.button, width: 'auto', padding: '8px 14px',
                         background: currentShift ? 'rgba(229,72,77,0.14)' : accentDim,
                         border: `1px solid ${currentShift ? bad : accent}`,
                         color: currentShift ? bad : accent,
                       }}
                       onClick={currentShift ? endShift : startShift}
                     >
-                      {currentShift ? <LogOut size={16} /> : <LogIn size={16} />}
-                      {currentShift ? 'Закончить смену' : 'Начать смену'}
+                      {currentShift ? '🚪 Закончить' : '🚪 Начать'}
                     </button>
                   </div>
-
+        
                   <input
                     style={{ ...styles.input, marginBottom: 12 }}
                     placeholder="Номер заказа"
                     value={order}
                     onChange={(e) => setOrder(e.target.value)}
                   />
-
+        
+                  {/* Список операций */}
                   {!openOp && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {OPS.map((op) => {
-                        const Icon = op.icon;
-                        return (
-                          <button key={op.id} style={{ ...styles.button, flexDirection: 'column', alignItems: 'flex-start', gap: 6, minHeight: 66 }} onClick={() => openOperation(op)}>
-                            <Icon size={18} color={accent} />
-                            <span style={{ fontSize: 12.5, lineHeight: 1.25, fontWeight: 600 }}>{op.name}</span>
-                          </button>
-                        );
-                      })}
+                      {OPS.map((op) => (
+                        <button key={op.id} style={{ ...styles.button, flexDirection: 'column', alignItems: 'flex-start', gap: 4, minHeight: 60 }} onClick={() => openOperation(op)}>
+                          <span style={{ fontSize: 20 }}>{op.icon}</span>
+                          <span style={{ fontSize: 12, lineHeight: 1.2, fontWeight: 600 }}>{op.name}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
-
+        
+                  {/* Окно операции */}
                   {openOp && (
-                    <div style={{ ...styles.card, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ ...styles.card, marginTop: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <openOp.icon size={18} color={accent} />
+                          <span style={{ fontSize: 20 }}>{openOp.icon}</span>
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{openOp.name}</span>
                         </div>
-                        <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer' }} onClick={() => setOpenOp(null)}>
-                          <X size={18} />
-                        </button>
+                        <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setOpenOp(null)}>✕</button>
                       </div>
-
+        
+                      {/* Таймер */}
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        background: panelAlt, borderRadius: 8, padding: '8px 10px',
+                        background: panelAlt, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
                       }}>
                         <div>
-                          <div style={{ fontSize: 10.5, color: textDim, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Timer size={12} /> Время на операцию
-                          </div>
+                          <div style={{ fontSize: 10.5, color: textDim }}>⏱ Время на операцию</div>
                           <div style={{ fontSize: 18, fontWeight: 700, ...styles.money }}>
-                            {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '\u2014'}
+                            {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '—'}
                           </div>
                         </div>
                         <button
                           style={{
-                            ...styles.button, width: 'auto', padding: '8px 12px',
+                            ...styles.button, width: 'auto', padding: '6px 12px',
                             background: !opStartTs || opEndTs ? accentDim : 'rgba(229,72,77,0.14)',
                             border: `1px solid ${!opStartTs || opEndTs ? accent : bad}`,
                             color: !opStartTs || opEndTs ? accent : bad,
                           }}
                           onClick={toggleOpTimer}
                         >
-                          {!opStartTs ? <Play size={15} /> : !opEndTs ? <Pause size={15} /> : <RotateCcw size={15} />}
-                          {!opStartTs ? 'Начать' : !opEndTs ? 'Стоп' : 'Заново'}
+                          {!opStartTs ? '▶' : !opEndTs ? '⏸' : '⟳'}
                         </button>
                       </div>
-
+        
+                      {/* Размер */}
                       {openOp.hasSize && (
-                        <div>
-                          <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Размер фасада</div>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Размер фасада</div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             {Object.keys(SIZE_LABELS).map((s) => (
                               <button key={s} onClick={() => setSize(s)} style={{
-                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600,
                                 border: `1px solid ${s === size ? accent : border}`,
                                 background: s === size ? accentDim : panelAlt,
                                 color: s === size ? accent : text,
@@ -836,14 +676,15 @@
                           </div>
                         </div>
                       )}
-
+        
+                      {/* Сложность */}
                       {openOp.hasComplexity && (
-                        <div>
-                          <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Материал</div>
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Материал</div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             {Object.keys(COMPLEXITY_LABELS).map((c) => (
                               <button key={c} onClick={() => setComplexity(c)} style={{
-                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 11, fontWeight: 600,
                                 border: `1px solid ${c === complexity ? accent : border}`,
                                 background: c === complexity ? accentDim : panelAlt,
                                 color: c === complexity ? accent : text,
@@ -852,59 +693,56 @@
                           </div>
                         </div>
                       )}
-
-                      <div>
-                        <div style={{ fontSize: 12, color: textDim, marginBottom: 6 }}>Количество, {openOp.unit}</div>
+        
+                      {/* Количество */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Количество, {openOp.unit}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => Math.max(1, q - 1))}>
-                            <Minus size={16} />
+                            −
                           </button>
                           <span style={{ fontSize: 22, fontWeight: 700, minWidth: 40, textAlign: 'center', ...styles.money }}>{qty}</span>
                           <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => q + 1)}>
-                            <Plus size={16} />
+                            +
                           </button>
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderTop: `1px solid ${border}`, paddingTop: 10 }}>
+        
+                      {/* Сумма */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${border}`, paddingTop: 10, marginBottom: 12 }}>
                         <span style={{ fontSize: 13, color: textDim }}>Начислится</span>
                         <span style={{ fontSize: 20, fontWeight: 700, color: good, ...styles.money }}>
                           +{money(calcAmount(openOp, rates, qty, size, complexity))}
                         </span>
                       </div>
-
-                      <button style={styles.primaryButton} onClick={confirmEntry}>Добавить запись</button>
-                      <div style={{ fontSize: 11, color: textDim, textAlign: 'center' }}>Время — только для статистики, на сумму не влияет</div>
+        
+                      <button style={styles.primaryButton} onClick={confirmEntry}>✅ Добавить запись</button>
                     </div>
                   )}
-
+        
+                  {/* Записи за сегодня */}
                   <div style={{ marginTop: 18 }}>
                     <div style={{ ...styles.eyebrow, marginBottom: 8 }}>{todayLabel} · {todayEntries.length} записей</div>
-                    {entriesLoading && <div style={{ color: textDim, fontSize: 13 }}>Загрузка...</div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {todayEntries.map((e) => {
                         const op = OPS.find((o) => o.id === e.opId);
                         return (
-                          <div key={e.id} style={{ ...styles.card, padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div key={e.id} style={{ ...styles.card, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{op ? op.name : e.opId}</div>
-                              <div style={{ fontSize: 11.5, color: textDim }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{op ? op.name : e.opId}</div>
+                              <div style={{ fontSize: 11, color: textDim }}>
                                 Заказ {e.order} · {e.qty} {op ? op.unit : ''}
                                 {e.size ? `, ${SIZE_LABELS[e.size]}` : ''}
-                                {e.complexity && e.complexity !== 'normal' ? `, ${COMPLEXITY_LABELS[e.complexity]}` : ''}
-                                {e.durationSec != null ? ` · ${formatDuration(e.durationSec)}` : ''}
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ fontSize: 14, fontWeight: 700, color: good, ...styles.money }}>{money(e.amount)}</span>
-                              <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', padding: 4 }} onClick={() => deleteEntry(e.id)}>
-                                <Trash2 size={15} />
-                              </button>
+                              <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', padding: 4 }} onClick={() => deleteEntry(e.id)}>🗑</button>
                             </div>
                           </div>
                         );
                       })}
-                      {!entriesLoading && todayEntries.length === 0 && (
+                      {todayEntries.length === 0 && (
                         <div style={{ color: textDim, fontSize: 13 }}>Записей ещё нет. Выберите операцию выше.</div>
                       )}
                     </div>
@@ -913,25 +751,22 @@
               </div>
             );
           }
-
-          // ---------- MANAGER ----------
+        
+          // === ЭКРАН РУКОВОДИТЕЛЯ ===
           if (screen === 'manager') {
             return (
               <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
                 <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', display: 'flex' }} onClick={() => setScreen('select')}>
-                    <ChevronLeft size={20} />
-                  </button>
+                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setScreen('select')}>←</button>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Users size={16} color={accent} />
+                    <span>👥</span>
                     <div style={{ ...styles.h1, fontSize: 15 }}>Руководитель</div>
                   </div>
-                  <div style={{ width: 20 }} />
+                  <div style={{ width: 30 }} />
                 </div>
-
-                <div style={{ display: 'flex', borderBottom: `1px solid ${border}` }}>
-                  {[['totals', 'Сводка'], ['export', 'В Excel'], ['rates', 'Расценки']].map(([id, label]) => (
+        
+                <div style={{ display: 'flex', borderBottom: `1px solid ${border}`, marginBottom: 12 }}>
+                  {[['totals', 'Сводка'], ['rates', 'Расценки']].map(([id, label]) => (
                     <button key={id} onClick={() => setManagerTab(id)} style={{
                       flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer',
                       color: managerTab === id ? accent : textDim,
@@ -940,194 +775,120 @@
                     }}>{label}</button>
                   ))}
                 </div>
-
+        
                 {managerTab === 'totals' && (
-                  <div style={styles.body}>
-                    <div style={{ fontSize: 12, color: textDim, marginBottom: 10 }}>{todayLabel}</div>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                  <div>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                       {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время']].map(([id, label]) => (
                         <button key={id} onClick={() => setPeriod(id)} style={{
-                          flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                          flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600,
                           border: `1px solid ${period === id ? accent : border}`,
                           background: period === id ? accentDim : panelAlt,
                           color: period === id ? accent : text,
                         }}>{label}</button>
                       ))}
                     </div>
-
-                    {managerLoading && <div style={{ color: textDim, fontSize: 13 }}>Загрузка...</div>}
-
-                    {!managerLoading && employees.length === 0 && (
-                      <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>
-                    )}
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {employees.map((emp) => {
-                        const d = managerData[emp.id] || { entries: [], total: 0 };
-                        return (
-                          <div key={emp.id} style={styles.card}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 700, fontSize: 14 }}>{emp.name}</span>
-                              <span style={{ fontWeight: 700, fontSize: 15, color: good, ...styles.money }}>{money(d.total)}</span>
-                            </div>
-                            <div style={{ fontSize: 12, color: textDim, marginTop: 2 }}>{d.entries.length} операций</div>
+        
+                    {employees.map((emp) => {
+                      const d = managerData[emp.id] || { entries: [], total: 0 };
+                      return (
+                        <div key={emp.id} style={{ ...styles.card, marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 600 }}>{emp.name}</span>
+                            <span style={{ fontWeight: 700, color: good, ...styles.money }}>{money(d.total)}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-
-                    {!managerLoading && employees.length > 0 && (
-                      <div style={{ ...styles.card, marginTop: 10, background: panelAlt, display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 13, color: textDim, fontWeight: 600 }}>Итого по цеху</span>
-                        <span style={{ fontWeight: 700, fontSize: 15, ...styles.money }}>
-                          {money(Object.values(managerData).reduce((s, d) => s + (d.total || 0), 0))}
-                        </span>
-                      </div>
-                    )}
-
-                    <button style={{ ...styles.button, marginTop: 10, justifyContent: 'center', color: textDim, fontSize: 12.5 }} onClick={loadManagerData}>
-                      <RefreshCw size={14} /> Обновить
-                    </button>
-                  </div>
-                )}
-
-                {managerTab === 'export' && (
-                  <div style={styles.body}>
-                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Сотрудники</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-                      <button style={{ ...styles.button, padding: '8px 12px', fontSize: 12.5, color: textDim, justifyContent: 'space-between' }} onClick={toggleExportAll}>
-                        Выбрать всех / снять всех
-                        <Check size={14} />
-                      </button>
-                      {employees.map((emp) => {
-                        const checked = !!exportSelected[emp.id];
-                        return (
-                          <button key={emp.id} onClick={() => toggleExportEmployee(emp.id)} style={{
-                            ...styles.button, justifyContent: 'space-between',
-                            border: `1px solid ${checked ? accent : border}`,
-                            background: checked ? accentDim : panelAlt,
-                            color: checked ? accent : text,
-                          }}>
-                            {emp.name}
-                            {checked && <Check size={16} />}
-                          </button>
-                        );
-                      })}
-                      {employees.length === 0 && <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>}
-                    </div>
-
-                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Период</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-                      {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время'], ['custom', 'Свой период']].map(([id, label]) => (
-                        <button key={id} onClick={() => setExportPeriod(id)} style={{
-                          padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                          border: `1px solid ${exportPeriod === id ? accent : border}`,
-                          background: exportPeriod === id ? accentDim : panelAlt,
-                          color: exportPeriod === id ? accent : text,
-                        }}>{label}</button>
-                      ))}
-                    </div>
-
-                    {exportPeriod === 'custom' && (
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>С</div>
-                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                          <div style={{ fontSize: 12, color: textDim }}>{d.entries.length} операций</div>
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>По</div>
-                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                      );
+                    })}
+        
+                    {employees.length > 0 && (
+                      <div style={{ ...styles.card, background: panelAlt, marginTop: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 600 }}>Итого по цеху</span>
+                          <span style={{ fontWeight: 700, ...styles.money }}>
+                            {money(Object.values(managerData).reduce((s, d) => s + (d.total || 0), 0))}
+                          </span>
                         </div>
                       </div>
                     )}
-
-                    <button style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={generateExcelReport} disabled={exportBusy}>
-                      {exportBusy ? <RefreshCw size={16} /> : <FileSpreadsheet size={16} />}
-                      {exportBusy ? 'Формирую...' : 'Сформировать отчёт'}
+        
+                    <button style={{ ...styles.button, marginTop: 10, justifyContent: 'center', fontSize: 12 }} onClick={loadManagerData}>
+                      🔄 Обновить
                     </button>
-                    {exportMsg && (
-                      <div style={{ color: exportMsg === 'Файл скачан' ? good : textDim, fontSize: 13, marginTop: 10, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        {exportMsg === 'Файл скачан' && <Download size={14} />}
-                        {exportMsg}
-                      </div>
-                    )}
                   </div>
                 )}
-
+        
                 {managerTab === 'rates' && editRates && (
-                  <div style={styles.body}>
-                    <div style={{ fontSize: 12, color: textDim, marginBottom: 12, lineHeight: 1.5 }}>
-                      Изменение расценки не меняет уже сохранённые записи — только новые.
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {OPS.map((op) => (
-                        <div key={op.id} style={styles.card}>
-                          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8 }}>{op.name}</div>
-                          {op.hasSize ? (
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              {Object.keys(SIZE_LABELS).map((s) => (
-                                <div key={s} style={{ flex: 1 }}>
-                                  <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>{SIZE_LABELS[s]}</div>
-                                  <input
-                                    style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
-                                    type="number"
-                                    value={editRates.assembly.sizes[s]}
-                                    onChange={(e) => setEditRates((prev) => ({
-                                      ...prev,
-                                      assembly: { ...prev.assembly, sizes: { ...prev.assembly.sizes, [s]: Number(e.target.value) } },
-                                    }))}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ) : op.hasComplexity ? (
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>Базовая ставка</div>
+                  <div>
+                    <div style={{ fontSize: 12, color: textDim, marginBottom: 12 }}>Изменение расценок — только для новых записей.</div>
+                    {OPS.map((op) => (
+                      <div key={op.id} style={{ ...styles.card, marginBottom: 8 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{op.icon} {op.name}</div>
+                        {op.hasSize ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {Object.keys(SIZE_LABELS).map((s) => (
+                              <div key={s} style={{ flex: 1 }}>
+                                <div style={{ fontSize: 10, color: textDim }}>{SIZE_LABELS[s]}</div>
                                 <input
-                                  style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
+                                  style={{ ...styles.input, padding: '6px', fontSize: 13 }}
                                   type="number"
-                                  value={editRates.glass_cut.rate}
-                                  onChange={(e) => setEditRates((prev) => ({ ...prev, glass_cut: { ...prev.glass_cut, rate: Number(e.target.value) } }))}
-                                />
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>Коэф. капризное</div>
-                                <input
-                                  style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
-                                  type="number"
-                                  step="0.1"
-                                  value={editRates.glass_cut.complexity.moro}
+                                  value={editRates.assembly.sizes[s]}
                                   onChange={(e) => setEditRates((prev) => ({
                                     ...prev,
-                                    glass_cut: { ...prev.glass_cut, complexity: { ...prev.glass_cut.complexity, moro: Number(e.target.value) } },
+                                    assembly: { ...prev.assembly, sizes: { ...prev.assembly.sizes, [s]: Number(e.target.value) } },
                                   }))}
                                 />
                               </div>
+                            ))}
+                          </div>
+                        ) : op.hasComplexity ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 10, color: textDim }}>Базовая ставка</div>
+                              <input
+                                style={{ ...styles.input, padding: '6px', fontSize: 13 }}
+                                type="number"
+                                value={editRates.glass_cut.rate}
+                                onChange={(e) => setEditRates((prev) => ({ ...prev, glass_cut: { ...prev.glass_cut, rate: Number(e.target.value) } }))}
+                              />
                             </div>
-                          ) : (
-                            <input
-                              style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }}
-                              type="number"
-                              value={editRates[op.id].rate}
-                              onChange={(e) => setEditRates((prev) => ({ ...prev, [op.id]: { ...prev[op.id], rate: Number(e.target.value) } }))}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <button style={{ ...styles.primaryButton, marginTop: 14 }} onClick={saveRates}>Сохранить расценки</button>
-                    {saveMsg && <div style={{ color: good, fontSize: 13, marginTop: 8, textAlign: 'center' }}>{saveMsg}</div>}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 10, color: textDim }}>Коэф. капризное</div>
+                              <input
+                                style={{ ...styles.input, padding: '6px', fontSize: 13 }}
+                                type="number"
+                                step="0.1"
+                                value={editRates.glass_cut.complexity.moro}
+                                onChange={(e) => setEditRates((prev) => ({
+                                  ...prev,
+                                  glass_cut: { ...prev.glass_cut, complexity: { ...prev.glass_cut.complexity, moro: Number(e.target.value) } },
+                                }))}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <input
+                            style={{ ...styles.input, padding: '6px', fontSize: 13 }}
+                            type="number"
+                            value={editRates[op.id].rate}
+                            onChange={(e) => setEditRates((prev) => ({ ...prev, [op.id]: { ...prev[op.id], rate: Number(e.target.value) } }))}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    <button style={styles.primaryButton} onClick={saveRates}>💾 Сохранить расценки</button>
+                    {saveMsg && <div style={{ color: good, marginTop: 8, textAlign: 'center' }}>{saveMsg}</div>}
                   </div>
                 )}
               </div>
             );
           }
-
-          return null;
+        
+          return <div style={styles.root}><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Ошибка загрузки</div></div>;
         }
-
-        // ===== РЕНДЕРИМ ПРИЛОЖЕНИЕ =====
+        
+        // === ЗАПУСК ===
         ReactDOM.createRoot(document.getElementById('root')).render(<ShopFloorApp />);
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
