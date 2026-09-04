@@ -1,1081 +1,1159 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Калькулятор зарплаты</title>
-    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<meta charset="UTF-8">
+<title>Калькулятор фасадов</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#F2EFE8;
+  --panel:#FFFFFF;
+  --ink:#1C1D1B;
+  --ink-soft:#5B5A54;
+  --line:#DDD7C8;
+  --accent:#B5501F;
+  --accent-soft:#F1E0D2;
+  --glass:#5E7A86;
+  --glass-soft:#E4EBEC;
+  --ok:#3C6E4F;
+  --radius:2px;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;padding:32px 20px 80px;}
+.wrap{max-width:1180px;margin:0 auto;}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:28px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:18px;}
+.head h1{font-family:'Space Grotesk',sans-serif;font-size:34px;margin:0 0 4px;letter-spacing:-0.5px;}
+.head p{margin:0;color:var(--ink-soft);font-size:14px;}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+.admin-toggle{font-family:'IBM Plex Mono',monospace;font-size:12px;background:none;border:1px solid var(--ink);color:var(--ink);padding:8px 14px;cursor:pointer;border-radius:var(--radius);}
+.admin-toggle:hover{background:var(--ink);color:var(--bg);}
+
+.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;align-items:start;}
+@media(max-width:880px){.grid{grid-template-columns:1fr;}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px;}
+.panel + .panel{margin-top:20px;}
+.section-title{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;margin:0 0 16px;display:flex;align-items:center;gap:10px;}
+.section-title .num{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-size:12px;border:1px solid var(--accent);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+.row{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
+.field{flex:1;min-width:140px;}
+label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px;}
+input[type=number],input[type=file],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);font-family:'IBM Plex Mono',monospace;font-size:14px;background:var(--bg);color:var(--ink);}
+input[type=number]:focus,select:focus{outline:none;border-color:var(--accent);}
+
+.opt-group{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+.opt-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:9px 13px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);cursor:pointer;color:var(--ink-soft);}
+.opt-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600;}
+
+.diagram-box{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:10px 0 4px;}
+.diagram-item{text-align:center;}
+.diagram-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+
+.receipt{position:sticky;top:20px;}
+.total-line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px;gap:10px;}
+.total-line .name{color:var(--ink-soft);}
+.total-line .val{font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+.total-line.grand{border-top:2px solid var(--ink);border-bottom:none;margin-top:10px;padding-top:16px;}
+.total-line.grand .name{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:600;color:var(--ink);}
+.total-line.grand .val{font-size:26px;font-weight:700;color:var(--accent);}
+.per-unit{text-align:right;font-size:11px;color:var(--ink-soft);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+
+.hint{font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.5;}
+.system-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--glass-soft);color:var(--glass);padding:4px 9px;border-radius:20px;margin-top:6px;}
+
+.facade-card{border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px;background:var(--bg);}
+.facade-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.facade-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;}
+.remove-facade-btn{background:none;border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;font-size:14px;padding:4px 10px;border-radius:var(--radius);}
+.remove-facade-btn:hover{border-color:var(--accent);color:var(--accent);}
+.subhead{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-soft);margin:14px 0 6px;}
+.add-facade-btn{font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--ink);color:var(--bg);border:none;padding:11px 18px;border-radius:var(--radius);cursor:pointer;width:100%;}
+.add-facade-btn:hover{opacity:0.85;}
+
+.admin{display:none;}
+.admin.open{display:block;}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;border-bottom:1px solid var(--ink);}
+td{padding:6px 8px;border-bottom:1px solid var(--line);}
+td input, td select{width:100%;padding:6px 8px;font-size:13px;}
+.del-btn{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:16px;}
+.del-btn:hover{color:var(--accent);}
+.add-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;background:none;border:1px dashed var(--ink-soft);padding:7px 12px;border-radius:var(--radius);cursor:pointer;color:var(--ink-soft);}
+.add-btn:hover{border-color:var(--accent);color:var(--accent);}
+.save-bar{margin-top:16px;display:flex;gap:10px;align-items:center;}
+.save-btn{font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--ink);color:var(--bg);border:none;padding:10px 18px;border-radius:var(--radius);cursor:pointer;}
+.save-status{font-size:12px;color:var(--ok);font-family:'IBM Plex Mono',monospace;}
+.warn{font-size:12px;color:var(--accent);background:var(--accent-soft);padding:10px 12px;border-radius:var(--radius);margin-top:14px;line-height:1.5;}
+.stock-ok{color:var(--ok);font-weight:600;}
+.stock-bad{color:var(--accent);font-weight:600;}
+.verdict-ok{background:#E6EFE9;color:var(--ok);border:1px solid var(--ok);padding:12px 14px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+.verdict-bad{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);padding:12px 14px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+</style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
-        const XLSX = window.XLSX;
+<div class="wrap">
 
-        // === ДАННЫЕ ===
-        const MANAGER_PIN = '1234';
-        const COMPANY_NAME = 'Омега Дизайн';
+  <div class="head">
+    <div>
+      <div class="eyebrow">Расчёт стоимости</div>
+      <h1>Калькулятор фасадов</h1>
+      <p>Алюминиевый профиль · стекло · уплотнитель · фурнитура</p>
+    </div>
+    <button class="admin-toggle" id="adminToggle">⚙ Режим администратора</button>
+  </div>
 
-        const OPS = [
-          { id: 'unload', name: 'Разгрузка комплектующих', unit: 'компл.' },
-          { id: 'glass_cut', name: 'Резка стекла', unit: 'шт', hasComplexity: true },
-          { id: 'lift', name: 'Подъём на лифте', unit: 'подъём' },
-          { id: 'profile_cut', name: 'Раскрой профиля', unit: 'шт' },
-          { id: 'milling', name: 'Фрезеровка профиля', unit: 'шт' },
-          { id: 'drilling_profile', name: 'Присадка профиля', unit: 'шт' },
-          { id: 'drilling_glass', name: 'Сверление стекла', unit: 'отв.' },
-          { id: 'cleaning', name: 'Чистка перед сборкой', unit: 'компл.' },
-          { id: 'sealant', name: 'Вставка уплотнителя', unit: 'шт' },
-          { id: 'assembly', name: 'Сборка фасада', unit: 'шт', hasSize: true },
-          { id: 'qc', name: 'Контроль качества', unit: 'шт' },
-          { id: 'packing', name: 'Упаковка', unit: 'шт' },
-          { id: 'shipping', name: 'Отгрузка', unit: 'компл.' },
-        ];
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <div class="section-title"><span class="num">1</span>Фасады в заказе</div>
+        <div id="facadesContainer"></div>
+        <button class="add-facade-btn" id="addFacadeBtn">+ Добавить фасад</button>
+      </div>
 
-        const DEFAULT_RATES = {
-          unload: { rate: 50 },
-          glass_cut: { rate: 150, complexity: { normal: 1, moro: 1.4 } },
-          lift: { rate: 40 },
-          profile_cut: { rate: 100 },
-          milling: { rate: 120 },
-          drilling_profile: { rate: 90 },
-          drilling_glass: { rate: 50 },
-          cleaning: { rate: 60 },
-          sealant: { rate: 70 },
-          assembly: { sizes: { small: 180, medium: 230, large: 290 } },
-          qc: { rate: 80 },
-          packing: { rate: 60 },
-          shipping: { rate: 90 },
-        };
+      <div class="panel admin" id="adminPanel">
+        <div class="section-title"><span class="num">⚙</span>Каталог и цены</div>
 
-        const SIZE_LABELS = { small: 'Малый', medium: 'Средний', large: 'Большой' };
-        const COMPLEXITY_LABELS = { normal: 'Обычное', moro: 'Капризное (Моро и т.п.)' };
+        <div class="subhead">Профили (система РУ/РШ определяет петли и углы)</div>
+        <div id="profileTable"></div>
+        <button class="add-btn" data-add="profiles">+ добавить тип профиля</button>
 
-        // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-        function money(n) {
-          return Math.round(n).toLocaleString('ru-RU') + ' ₽';
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Стекло / заполнение</div>
+        <div id="glassTable"></div>
+        <button class="add-btn" data-add="glass">+ добавить тип стекла</button>
 
-        function todayKey(ts) {
-          return new Date(ts).toDateString();
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Петли (система РУ / РШ / both — подходит к обеим)</div>
+        <div id="hingeTable"></div>
+        <button class="add-btn" data-add="hinges">+ добавить тип петли</button>
 
-        function formatDate(ts) {
-          const s = new Date(ts).toLocaleDateString('ru-RU', {
-            day: 'numeric', month: 'long', weekday: 'long',
-          });
-          return s.charAt(0).toUpperCase() + s.slice(1);
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Ручки</div>
+        <div id="handleTable"></div>
+        <button class="add-btn" data-add="handles">+ добавить тип ручки</button>
 
-        function formatTime(ts) {
-          return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Кромка стекла (₽/пог.м периметра стекла)</div>
+        <div id="edgeTable"></div>
+        <button class="add-btn" data-add="edges">+ добавить вид кромки</button>
 
-        function formatDuration(sec) {
-          if (sec == null) return '—';
-          const m = Math.floor(sec / 60);
-          const s = sec % 60;
-          return `${m}:${String(s).padStart(2, '0')}`;
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Плёнка на стекло (₽/м²)</div>
+        <div id="filmTable"></div>
+        <button class="add-btn" data-add="films">+ добавить вид плёнки</button>
 
-        function formatShiftDuration(sec) {
-          if (sec == null) return '—';
-          const h = Math.floor(sec / 3600);
-          const m = Math.floor((sec % 3600) / 60);
-          return `${h} ч ${String(m).padStart(2, '0')} мин`;
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Пескоструй (₽/фасад, только работа)</div>
+        <div id="sandblastTable"></div>
+        <button class="add-btn" data-add="sandblast">+ добавить вид пескоструя</button>
 
-        function formatHMS(sec) {
-          if (sec == null) return '';
-          const h = Math.floor(sec / 3600);
-          const m = Math.floor((sec % 3600) / 60);
-          const s = sec % 60;
-          const pad = (n) => String(n).padStart(2, '0');
-          return `${pad(h)}:${pad(m)}:${pad(s)}`;
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Упаковка (₽/шт)</div>
+        <div id="packagingTable"></div>
+        <button class="add-btn" data-add="packaging">+ добавить вид упаковки</button>
 
-        function toDateInputValue(ts) {
-          const d = new Date(ts);
-          const pad = (n) => String(n).padStart(2, '0');
-          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        }
+        <div style="height:18px;"></div>
+        <div class="subhead">Углы + винты (комплект на систему)</div>
+        <div class="row">
+          <div class="field"><label>Угол+винты РУ, ₽/компл.</label><input type="number" id="p_cornerRU" step="1"></div>
+          <div class="field"><label>Угол+винты РШ, ₽/компл.</label><input type="number" id="p_cornerRSH" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Остаток компл. РУ, шт</label><input type="number" id="s_cornerRU" step="1"></div>
+          <div class="field"><label>Остаток компл. РШ, шт</label><input type="number" id="s_cornerRSH" step="1"></div>
+        </div>
 
-        function getRange(p, customStart, customEnd) {
-          const now = Date.now();
-          if (p === 'today') {
-            const d = new Date(); d.setHours(0, 0, 0, 0);
-            return [d.getTime(), now];
+        <div class="subhead">Уплотнитель (мягкий ≤1800мм высоты / жёсткий &gt;1800мм — автоматически)</div>
+        <div class="row">
+          <div class="field"><label>Мягкий, ₽/м</label><input type="number" id="p_sealantSoft" step="1"></div>
+          <div class="field"><label>Жёсткий, ₽/м</label><input type="number" id="p_sealantHard" step="1"></div>
+          <div class="field"><label>Остаток, м (общий)</label><input type="number" id="s_sealant" step="1"></div>
+        </div>
+
+        <div class="subhead">Прочее</div>
+        <div class="row">
+          <div class="field"><label>Фрезеровка под петлю, ₽/отв.</label><input type="number" id="p_mill" step="1"></div>
+          <div class="field"><label>Сверление стекла под ручку (материал+работа), ₽/отв.</label><input type="number" id="p_glassDrill" step="1"></div>
+          <div class="field"><label>Втулка под отверстие, ₽/шт</label><input type="number" id="p_bushing" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Покраска (услуга), ₽/фасад</label><input type="number" id="p_painting" step="1"></div>
+          <div class="field"><label>Запас на подрезку, %</label><input type="number" id="p_waste" step="1"></div>
+        </div>
+
+        <div class="subhead">Работы производства (из «ПРАЙС ЛИСТ - РАБОТ»)</div>
+        <div class="row">
+          <div class="field"><label>Нарезка профиля («Планок в размер»), ₽/фасад</label><input type="number" id="p_cutProfile" step="1"></div>
+          <div class="field"><label>Сборка фурнитуры, ₽/фасад</label><input type="number" id="p_hardwareAssembly" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Подготовка планок, ₽/фасад</label><input type="number" id="p_prepProfile" step="1"></div>
+          <div class="field"><label>Сборка фасада (стандарт), ₽/фасад</label><input type="number" id="p_assembleFacade" step="1"></div>
+          <div class="field"><label>Резка стекла, ₽/фасад</label><input type="number" id="p_cutGlassWork" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Сверление профиля под ручку, ₽/отв.</label><input type="number" id="p_handleProfileDrill" step="1"></div>
+          <div class="field"><label>Работа по кромке (закромление), ₽/фасад</label><input type="number" id="p_edgeLabor" step="1"></div>
+          <div class="field"><label>Работа по плёнке, ₽/фасад</label><input type="number" id="p_filmLabor" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Упаковка изделия, ₽/фасад</label><input type="number" id="p_packagingLabor" step="1"></div>
+          <div class="field"><label>Произв. картонной упаковки, ₽/фасад</label><input type="number" id="p_packagingBoxLabor" step="1"></div>
+        </div>
+        <div class="hint">Пять полей выше — это те же строки, что в листе МАРЖА («ПРАЙС ЛИСТ - РАБОТ»), только разбитые по позициям вместо одной общей суммы. Работа по кромке/плёнке добавляется, только если фасад с кромкой/плёнкой; по картонной упаковке — только если выбран картон. В файле остались «снятие борта» и альтернативные ставки сборки (нестандарт/опт) — не добавлял, слишком неоднозначно, к какому сценарию их привязывать.</div>
+
+        <div class="save-bar">
+          <button class="save-btn" id="saveBtn">Сохранить каталог</button>
+          <span class="save-status" id="saveStatus"></span>
+        </div>
+        <div class="warn">Каталог хранится в общем хранилище артефакта: изменения увидят все, кто открывает этот калькулятор, включая клиентов через браузерную консоль. Для боевого использования на сайте цены и формулы стоит перенести на защищённый бэкенд.</div>
+
+        <div style="height:22px;"></div>
+        <div class="section-title" style="font-size:13px;"><span class="num">⇅</span>Обновление каталога через Excel</div>
+        <div class="row" style="align-items:center;">
+          <div class="field"><button class="add-btn" id="exportBtn">⭳ Скачать шаблон/текущий каталог (.xlsx)</button></div>
+          <div class="field">
+            <label style="margin-bottom:6px;">Загрузить каталог из Excel</label>
+            <input type="file" id="importFile" accept=".xlsx,.xls,.csv">
+          </div>
+        </div>
+        <div class="hint">Понимает два формата: 1) файл, скачанный кнопкой выше (листы Профили/Стекло/Петли/Ручки/Кромка/Упаковка/Прочее); 2) ваши родные листы «Лист1» (прайс на профиль) и «Лист2» (прайс на стекло) — их можно грузить как есть, без переформатирования. Всё остальное (петли/углы/уплотнитель/кромка/покраска/упаковка/втулки) обновляется через шаблон этого калькулятора.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="section-title"><span class="num">▤</span>Чертёж</div>
+        <div class="diagram-box" id="diagramBox"></div>
+      </div>
+
+      <div class="panel receipt">
+        <div class="section-title"><span class="num">Σ</span>Смета по заказу</div>
+        <div id="breakdown"></div>
+        <div class="total-line grand">
+          <div class="name">Итого</div>
+          <div class="val" id="grandTotal">0 ₽</div>
+        </div>
+        <div class="per-unit" id="perUnit"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px;">
+    <div class="section-title"><span class="num">▦</span>Наличие на складе</div>
+    <table id="stockTable"><tr><th>Комплектующая</th><th>Нужно на заказ</th><th>В наличии</th><th>Статус</th></tr></table>
+    <div id="stockVerdict"></div>
+    <div class="hint">Учитывает профиль / стекло / петли / ручки / углы-комплекты / уплотнитель. Кромка, покраска, упаковка и втулки в остатки пока не считаются.</div>
+  </div>
+
+  <div class="panel" style="margin-top:20px;">
+    <div class="section-title"><span class="num">▥</span>Спецификация на раскрой и комплектующие
+      <button class="admin-toggle" id="copySpecBtn" style="margin-left:auto;font-size:11px;padding:6px 12px;">Скопировать</button>
+    </div>
+    <table id="specTable"><tr><th>Деталь</th><th>Размер, мм</th><th>Кол-во на 1 фасад</th><th>Кол-во на заказ</th></tr></table>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const DEFAULT_CATALOG = {
+  profiles: [
+    {name:"ру-1 МС", price:222.34, stock:0, system:"РУ"},
+    {name:"ру-1 МЗ", price:267.36, stock:0, system:"РУ"},
+    {name:"ру-1 МШ", price:267.34, stock:0, system:"РУ"},
+    {name:"ру-1 МЧ", price:293.08, stock:0, system:"РУ"},
+    {name:"РУ-2 МС", price:236.12, stock:0, system:"РУ"},
+    {name:"РУ-2 МЗ", price:236.12, stock:0, system:"РУ"},
+    {name:"РУ-2 МШ", price:236.12, stock:0, system:"РУ"},
+    {name:"РУ-2 МЧ", price:259.09, stock:0, system:"РУ"},
+    {name:"РУ-3 МС", price:218.66, stock:0, system:"РУ"},
+    {name:"РУ-3 МЗ", price:264.6, stock:0, system:"РУ"},
+    {name:"РУ-3 МШ", price:264.6, stock:60, system:"РУ"},
+    {name:"РУ-3 МЧ", price:283.89, stock:60, system:"РУ"},
+    {name:"РУ-4 МС", price:293.08, stock:0, system:"РУ"},
+    {name:"РУ-4 МЗ", price:293.08, stock:0, system:"РУ"},
+    {name:"РУ-4 МШ", price:293.08, stock:0, system:"РУ"},
+    {name:"РУ-4 МЧ", price:293.08, stock:0, system:"РУ"},
+    {name:"РШ-1 МС", price:339.02, stock:0, system:"РШ"},
+    {name:"РШ-1 МЗ", price:403.33, stock:0, system:"РШ"},
+    {name:"РШ-1 МК", price:403.33, stock:0, system:"РШ"},
+    {name:"РШ-1 МШ", price:403.33, stock:0, system:"РШ"},
+    {name:"РШ-1 МЧ", price:442.84, stock:20, system:"РШ"},
+    {name:"РШ-3 МС", price:354.64, stock:0, system:"РШ"},
+    {name:"РШ-3 МЗ", price:422.62, stock:0, system:"РШ"},
+    {name:"РШ-3 МК", price:422.62, stock:0, system:"РШ"},
+    {name:"РШ-3 МШ", price:422.63, stock:0, system:"РШ"},
+    {name:"РШ-3 МЧ", price:466.72, stock:0, system:"РШ"},
+    {name:"РШ-4 МС", price:438.24, stock:0, system:"РШ"},
+    {name:"РШ-4 МЗ", price:526.44, stock:0, system:"РШ"},
+    {name:"РШ-4 МШ", price:789.66, stock:0, system:"РШ"},
+    {name:"РШ-4 МЧ", price:578.81, stock:0, system:"РШ"},
+    {name:"РШ-7 МС", price:316.05, stock:0, system:"РШ"},
+    {name:"РШ-7 МЗ", price:383.12, stock:0, system:"РШ"},
+    {name:"РШ-7 МШ", price:383.12, stock:0, system:"РШ"},
+    {name:"РШ-7 МЧ", price:421.71, stock:0, system:"РШ"}
+  ],
+  glass: [
+    {name:"Зеркало БЦВ 4мм(2550*1605)", price:2376, stock:0},
+    {name:"Зеркало БронЗА 4мм (2550*1605)", price:3960, stock:0},
+    {name:"Зеркало Сатин БРОНЗА 4мм (2550*1605)", price:5445, stock:0},
+    {name:"Зеркало СЕРОЕ 4мм (2550*1605)", price:3960, stock:0},
+    {name:"Зеркало САТИН 4мм (2550*1605)", price:3960, stock:0},
+    {name:"Зеркало САТИН СЕРОЕ 4мм (2550*1605)", price:5445, stock:0},
+    {name:"Сатин БРОНЗА 4мм (2550*1605)", price:4125, stock:0},
+    {name:"Сатин БЦВ 4мм (2550*1605)", price:2541, stock:0},
+    {name:"Сатин Серый 4мм (2550*1605)", price:3960, stock:0},
+    {name:"Стекло Стоп Сол СЕРОЕ 4мм (3210*1000)", price:4785, stock:0},
+    {name:"Стекло Лакобель 9003 (2550*1605)", price:4620, stock:0},
+    {name:"Стекло Осветленное 4мм (2550*1605) UltraviewR", price:3630, stock:0},
+    {name:"Стекло полир БЦВ (3210*1250)", price:1485, stock:8},
+    {name:"Стекло Сатин ультравай 4мм БЦВ (2550*1605)", price:4290, stock:0},
+    {name:"Стекло СтопСол БРОНЗА 4мм (3210*1000)", price:4785, stock:0},
+    {name:"Стекло СтопСол БРОНЗА 4мм (3210*1250)", price:4785, stock:0},
+    {name:"Стекло СтопСол СЕРОЕ 4мм (3210*1250)", price:4785, stock:0},
+    {name:"Стекло тон БРОНЗА 4мм(3210*1125)", price:2904, stock:0},
+    {name:"Стекло тон Серое 4мм (2550*1605)", price:2904, stock:0},
+    {name:"Стекло тон СЕРОЕ 4мм(2550*1605)", price:2805, stock:0},
+    {name:"Стекло тонир бронза 4мм (2550*1605)", price:2805, stock:0},
+    {name:"Стекло тонир серое 4мм (2550*1605)", price:2805, stock:0},
+    {name:"Стоп Сол СЕРЫЙ 4мм(2250*1605)", price:4620, stock:0},
+    {name:"Дарг грей (1650*2440; 3300*2140) без обработки кромки!", price:7380, stock:0}
+  ],
+  hinges: [
+    {name:"накл", price:185, stock:0, system:"both"},
+    {name:"накл/дов", price:235, stock:0, system:"both"},
+    {name:"петля п/накл. РУ", price:235, stock:0, system:"РУ"},
+    {name:"петля 135* РУ", price:275, stock:0, system:"РУ"},
+    {name:"Петля накл с доводчиком РУ", price:235, stock:0, system:"РУ"},
+    {name:"Петля вкл с доводчиком РУ", price:325, stock:0, system:"РУ"},
+    {name:"петля накл. РШ", price:115, stock:0, system:"РШ"},
+    {name:"петля вкл. РШ", price:115, stock:0, system:"РШ"},
+    {name:"петля п/накл. РШ", price:115, stock:0, system:"РШ"},
+    {name:"петля 135* РШ", price:115, stock:0, system:"РШ"},
+    {name:"Петля накл с доводчиком РШ", price:115, stock:0, system:"РШ"},
+    {name:"Петля вкл с доводчиком РШ", price:115, stock:0, system:"РШ"},
+    {name:"Петля п/накл с доводчиком РШ", price:115, stock:0, system:"РШ"}
+  ],
+  handles: [
+    {name:"Скоба алюминиевая 128мм", price:250, stock:20},
+    {name:"Врезная в профиль", price:180, stock:10},
+    {name:"Врезная в стекло", price:320, stock:0}
+  ],
+  edges: [
+    {name:"Нет", price:0, stock:0},
+    {name:"ПЕК", price:260, stock:0},
+    {name:"МЕК", price:270, stock:0}
+  ],
+  films: [
+    {name:"Нет", price:0, stock:0},
+    {name:"Тонирующая А (матовая)", price:1085, stock:0},
+    {name:"Тонирующая В (иней)", price:1090, stock:0},
+    {name:"Тонирующая В (951)", price:1095, stock:0},
+    {name:"Тонирующая В (8510)", price:1100, stock:0},
+    {name:"Тонирующая С (641)", price:1105, stock:0},
+    {name:"Тонирующая Е (архитектурная)", price:1115, stock:0},
+    {name:"Защитная F", price:1120, stock:0}
+  ],
+  sandblast: [
+    {name:"Нет", price:0, stock:0},
+    {name:"Пескоструй А", price:477, stock:0},
+    {name:"Пескоструй Б", price:1432, stock:0}
+  ],
+  packaging: [
+    {name:"Стрейч", price:20, stock:0},
+    {name:"Картон", price:260, stock:0}
+  ],
+  cornerRU:35, cornerRUStock:80,
+  cornerRSH:75, cornerRSHStock:80,
+  sealantSoft:18, sealantHard:40, sealantStock:50,
+  mill:150,
+  glassDrill:143,          // работа "Сверление стекла 2 отв 7мм" (из ПРАЙС ЛИСТ - РАБОТ)
+  handleProfileDrill:62,   // работа "Сверление профиля под ручку"
+  bushing:10,
+  painting:2500,
+  cutProfile:95,           // работа "Планок в размер"
+  hardwareAssembly:29,     // работа "Собр.комплект.Фурнитуры"
+  prepProfile:143,         // работа "Подготовка планок"
+  assembleFacade:205,      // работа "Собрка фасад.Стандарт"
+  cutGlassWork:102,        // работа "Вырезано стекол"
+  filmLabor:119,           // работа "Оклееных Ст.Плен.ЗАЩИТНОЙ" — добавляется, если выбрана плёнка
+  edgeLabor:1432,          // работа "Закромленных стекол ПЕК/МЕК" — добавляется, если кромка не "Нет"
+  packagingLabor:179,      // работа "Упакован. стеклоизделий" — всегда при упаковке
+  packagingBoxLabor:119,   // работа "Произ-во картон. упаковки" — доп. если упаковка "Картон"
+  waste:5
+};
+
+let catalog = JSON.parse(JSON.stringify(DEFAULT_CATALOG));
+let facades = [];
+
+function suggestHingeCount(h){
+  if(h<=900) return 2;
+  if(h<=1600) return 3;
+  return 4;
+}
+
+function newFacade(){
+  return {
+    width:500, height:1800, qty:1,
+    profileIdx:0, glassIdx:0,
+    hingeMode:'none', hingeCount:suggestHingeCount(1800), hingeTypeIdx:0,
+    leftQty:1, rightQty:0, sidesConfirmed:false,
+    handleNeeded:false, handleOrientation:'horizontal', handlePlacement:'profile', handlePosition:'center',
+    handleTypeIdx:0, handleQty:1,
+    edgeIdx:0, paintingNeeded:false, packagingIdx:0,
+    filmIdx:0, sandblastIdx:0
+  };
+}
+
+async function loadCatalog(){
+  try{
+    const res = await window.storage.get('facade-catalog', true);
+    if(res && res.value){ catalog = JSON.parse(res.value); }
+  }catch(e){ /* нет сохранённого каталога — используем дефолт */ }
+  facades = [newFacade()];
+  renderAll();
+}
+
+async function saveCatalog(){
+  document.getElementById('saveStatus').textContent = "Сохранение...";
+  try{
+    await window.storage.set('facade-catalog', JSON.stringify(catalog), true);
+    document.getElementById('saveStatus').textContent = "✓ Сохранено";
+    setTimeout(()=>document.getElementById('saveStatus').textContent="",2000);
+  }catch(e){
+    document.getElementById('saveStatus').textContent = "Ошибка сохранения";
+  }
+}
+
+function renderAll(){
+  renderAdminTables();
+  renderFixedFields();
+  renderFacadesContainer();
+  calcAll();
+}
+
+/* ---------- admin catalog tables ---------- */
+
+function tableHtml(list, key, unit){
+  let rows = list.map((item,i)=>`
+    <tr>
+      <td><input data-key="${key}" data-i="${i}" data-f="name" value="${item.name}"></td>
+      <td style="width:110px;"><input type="number" data-key="${key}" data-i="${i}" data-f="price" value="${item.price}"></td>
+      <td style="width:100px;"><input type="number" data-key="${key}" data-i="${i}" data-f="stock" value="${item.stock||0}"></td>
+      <td style="width:36px;"><button class="del-btn" data-del="${key}" data-i="${i}">×</button></td>
+    </tr>`).join('');
+  return `<table><tr><th>Название</th><th>Цена, ₽/${unit}</th><th>Остаток, ${unit}</th><th></th></tr>${rows}</table>`;
+}
+
+function systemTableHtml(list, key, unit, systemOptions){
+  let rows = list.map((item,i)=>`
+    <tr>
+      <td><input data-key="${key}" data-i="${i}" data-f="name" value="${item.name}"></td>
+      <td style="width:95px;"><input type="number" data-key="${key}" data-i="${i}" data-f="price" value="${item.price}"></td>
+      <td style="width:90px;">
+        <select data-key="${key}" data-i="${i}" data-f="system">
+          ${systemOptions.map(s=>`<option value="${s}" ${item.system===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td style="width:85px;"><input type="number" data-key="${key}" data-i="${i}" data-f="stock" value="${item.stock||0}"></td>
+      <td style="width:36px;"><button class="del-btn" data-del="${key}" data-i="${i}">×</button></td>
+    </tr>`).join('');
+  return `<table><tr><th>Название</th><th>Цена, ₽/${unit}</th><th>Система</th><th>Остаток, ${unit}</th><th></th></tr>${rows}</table>`;
+}
+
+function renderAdminTables(){
+  document.getElementById('profileTable').innerHTML = systemTableHtml(catalog.profiles,'profiles','м',['РУ','РШ']);
+  document.getElementById('glassTable').innerHTML = tableHtml(catalog.glass,'glass','м²');
+  document.getElementById('hingeTable').innerHTML = systemTableHtml(catalog.hinges,'hinges','шт',['РУ','РШ','both']);
+  document.getElementById('handleTable').innerHTML = tableHtml(catalog.handles,'handles','шт');
+  document.getElementById('edgeTable').innerHTML = tableHtml(catalog.edges,'edges','м');
+  document.getElementById('filmTable').innerHTML = tableHtml(catalog.films,'films','м²');
+  document.getElementById('sandblastTable').innerHTML = tableHtml(catalog.sandblast,'sandblast','шт');
+  document.getElementById('packagingTable').innerHTML = tableHtml(catalog.packaging,'packaging','шт');
+
+  document.querySelectorAll('[data-key]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const {key,i,f} = e.target.dataset;
+      catalog[key][i][f] = (f==='price'||f==='stock') ? (parseFloat(e.target.value)||0) : e.target.value;
+      renderFacadesContainer(); calcAll();
+    });
+    inp.addEventListener('change', e=>{
+      const {key,i,f} = e.target.dataset;
+      if(f==='system'){
+        catalog[key][i][f] = e.target.value;
+        renderFacadesContainer(); calcAll();
+      }
+    });
+  });
+  document.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const {del,i} = e.target.dataset;
+      catalog[del].splice(i,1);
+      renderAll();
+    });
+  });
+}
+
+document.querySelectorAll('[data-add]').forEach(btn=>{
+  btn.addEventListener('click', e=>{
+    const key = e.target.dataset.add;
+    const item = {name:"Новый тип", price:0, stock:0};
+    if(key==='profiles') item.system = 'РУ';
+    if(key==='hinges') item.system = 'both';
+    catalog[key].push(item);
+    renderAll();
+  });
+});
+
+function renderFixedFields(){
+  document.getElementById('p_cornerRU').value = catalog.cornerRU;
+  document.getElementById('p_cornerRSH').value = catalog.cornerRSH;
+  document.getElementById('s_cornerRU').value = catalog.cornerRUStock;
+  document.getElementById('s_cornerRSH').value = catalog.cornerRSHStock;
+  document.getElementById('p_sealantSoft').value = catalog.sealantSoft;
+  document.getElementById('p_sealantHard').value = catalog.sealantHard;
+  document.getElementById('s_sealant').value = catalog.sealantStock;
+  document.getElementById('p_mill').value = catalog.mill;
+  document.getElementById('p_glassDrill').value = catalog.glassDrill;
+  document.getElementById('p_bushing').value = catalog.bushing;
+  document.getElementById('p_painting').value = catalog.painting;
+  document.getElementById('p_waste').value = catalog.waste;
+  document.getElementById('p_cutProfile').value = catalog.cutProfile;
+  document.getElementById('p_hardwareAssembly').value = catalog.hardwareAssembly;
+  document.getElementById('p_prepProfile').value = catalog.prepProfile;
+  document.getElementById('p_assembleFacade').value = catalog.assembleFacade;
+  document.getElementById('p_cutGlassWork').value = catalog.cutGlassWork;
+  document.getElementById('p_filmLabor').value = catalog.filmLabor;
+  document.getElementById('p_handleProfileDrill').value = catalog.handleProfileDrill;
+  document.getElementById('p_edgeLabor').value = catalog.edgeLabor;
+  document.getElementById('p_packagingLabor').value = catalog.packagingLabor;
+  document.getElementById('p_packagingBoxLabor').value = catalog.packagingBoxLabor;
+}
+
+['p_cornerRU','p_cornerRSH','s_cornerRU','s_cornerRSH','p_sealantSoft','p_sealantHard','s_sealant','p_mill','p_glassDrill','p_bushing','p_painting','p_waste','p_cutProfile','p_hardwareAssembly','p_prepProfile','p_assembleFacade','p_cutGlassWork','p_filmLabor','p_handleProfileDrill','p_edgeLabor','p_packagingLabor','p_packagingBoxLabor'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', e=>{
+    const map = {p_cornerRU:'cornerRU',p_cornerRSH:'cornerRSH',s_cornerRU:'cornerRUStock',s_cornerRSH:'cornerRSHStock',p_sealantSoft:'sealantSoft',p_sealantHard:'sealantHard',s_sealant:'sealantStock',p_mill:'mill',p_glassDrill:'glassDrill',p_bushing:'bushing',p_painting:'painting',p_waste:'waste',p_cutProfile:'cutProfile',p_hardwareAssembly:'hardwareAssembly',p_prepProfile:'prepProfile',p_assembleFacade:'assembleFacade',p_cutGlassWork:'cutGlassWork',p_filmLabor:'filmLabor',p_handleProfileDrill:'handleProfileDrill',p_edgeLabor:'edgeLabor',p_packagingLabor:'packagingLabor',p_packagingBoxLabor:'packagingBoxLabor'};
+    catalog[map[id]] = parseFloat(e.target.value)||0;
+    renderFacadesContainer(); calcAll();
+  });
+});
+
+document.getElementById('saveBtn').addEventListener('click', saveCatalog);
+document.getElementById('adminToggle').addEventListener('click', ()=>{
+  document.getElementById('adminPanel').classList.toggle('open');
+});
+
+/* ---------- Excel import / export ---------- */
+
+const FIXED_PARAMS = [
+  {label:'Угол+винты РУ, ₽/компл.', key:'cornerRU'},
+  {label:'Остаток компл. РУ, шт', key:'cornerRUStock'},
+  {label:'Угол+винты РШ, ₽/компл.', key:'cornerRSH'},
+  {label:'Остаток компл. РШ, шт', key:'cornerRSHStock'},
+  {label:'Уплотнитель мягкий, ₽/м', key:'sealantSoft'},
+  {label:'Уплотнитель жёсткий, ₽/м', key:'sealantHard'},
+  {label:'Уплотнитель, остаток м', key:'sealantStock'},
+  {label:'Фрезеровка под петлю, ₽/отв.', key:'mill'},
+  {label:'Сверление стекла под ручку, ₽/отв.', key:'glassDrill'},
+  {label:'Втулка под отверстие, ₽/шт', key:'bushing'},
+  {label:'Покраска, ₽/фасад', key:'painting'},
+  {label:'Запас на подрезку, %', key:'waste'},
+  {label:'Нарезка профиля, ₽/фасад', key:'cutProfile'},
+  {label:'Сборка фурнитуры, ₽/фасад', key:'hardwareAssembly'},
+  {label:'Подготовка планок, ₽/фасад', key:'prepProfile'},
+  {label:'Сборка фасада, ₽/фасад', key:'assembleFacade'},
+  {label:'Резка стекла, ₽/фасад', key:'cutGlassWork'},
+  {label:'Работа по плёнке, ₽/фасад', key:'filmLabor'},
+  {label:'Сверление профиля под ручку, ₽/отв.', key:'handleProfileDrill'},
+  {label:'Работа по кромке, ₽/фасад', key:'edgeLabor'},
+  {label:'Упаковка изделия (работа), ₽/фасад', key:'packagingLabor'},
+  {label:'Произв. картонной упаковки (работа), ₽/фасад', key:'packagingBoxLabor'},
+];
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const wb = XLSX.utils.book_new();
+  const catSheet = (list)=>XLSX.utils.json_to_sheet(list.map(x=>({Название:x.name, Цена:x.price, Система:x.system||'', Остаток:x.stock||0})));
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.profiles), 'Профили');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.glass), 'Стекло');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.hinges), 'Петли');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.handles), 'Ручки');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.edges), 'Кромка');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.films), 'Плёнка');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.sandblast), 'Пескоструй');
+  XLSX.utils.book_append_sheet(wb, catSheet(catalog.packaging), 'Упаковка');
+  const paramSheet = XLSX.utils.json_to_sheet(FIXED_PARAMS.map(p=>({Параметр:p.label, Значение:catalog[p.key]})));
+  XLSX.utils.book_append_sheet(wb, paramSheet, 'Прочее');
+  XLSX.writeFile(wb, 'facade-catalog.xlsx');
+});
+
+function detectSystem(codeText){
+  const t = String(codeText||'').toLowerCase();
+  return t.includes('рш') || t.includes('rsh') ? 'РШ' : 'РУ';
+}
+
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      let touched = [];
+
+      const readList = (sheetName, withSystem)=>{
+        if(!wb.SheetNames.includes(sheetName)) return null;
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+        return json.map(r=>{
+          const item = {name:String(r['Название']??'').trim(), price:parseFloat(r['Цена'])||0, stock:parseFloat(r['Остаток'])||0};
+          if(withSystem) item.system = String(r['Система']??'РУ').trim() || 'РУ';
+          return item;
+        }).filter(x=>x.name);
+      };
+
+      const p1 = readList('Профили', true); if(p1 && p1.length){ catalog.profiles = p1; touched.push('Профили'); }
+      const g1 = readList('Стекло', false); if(g1 && g1.length){ catalog.glass = g1; touched.push('Стекло'); }
+      const h1 = readList('Петли', true); if(h1 && h1.length){ catalog.hinges = h1; touched.push('Петли'); }
+      const hd1 = readList('Ручки', false); if(hd1 && hd1.length){ catalog.handles = hd1; touched.push('Ручки'); }
+      const e1 = readList('Кромка', false); if(e1 && e1.length){ catalog.edges = e1; touched.push('Кромка'); }
+      const fl1 = readList('Плёнка', false); if(fl1 && fl1.length){ catalog.films = fl1; touched.push('Плёнка'); }
+      const sb1 = readList('Пескоструй', false); if(sb1 && sb1.length){ catalog.sandblast = sb1; touched.push('Пескоструй'); }
+      const pk1 = readList('Упаковка', false); if(pk1 && pk1.length){ catalog.packaging = pk1; touched.push('Упаковка'); }
+
+      if(wb.SheetNames.includes('Прочее')){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Прочее']);
+        rows.forEach(r=>{
+          const found = FIXED_PARAMS.find(p=>p.label === String(r['Параметр']).trim());
+          if(found) catalog[found.key] = parseFloat(r['Значение'])||0;
+        });
+        touched.push('Прочее');
+      }
+
+      // родной формат клиента: Лист1 (профиль), Лист2 (стекло)
+      if(!p1 && wb.SheetNames.includes('Лист1')){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Лист1'], {header:1});
+        const list = [];
+        rows.forEach(row=>{
+          const name = row[6], code = row[7], price = row[9];
+          if(typeof name === 'string' && name.trim() && typeof price === 'number'){
+            list.push({name:name.trim(), price:price, stock:0, system:detectSystem(code)});
           }
-          if (p === 'week') {
-            const d = new Date();
-            const day = (d.getDay() + 6) % 7;
-            d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0);
-            return [d.getTime(), now];
+        });
+        if(list.length){ catalog.profiles = list; touched.push('Лист1 → Профили'); }
+      }
+      if(!g1 && wb.SheetNames.includes('Лист2')){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Лист2'], {header:1});
+        const list = [];
+        rows.forEach(row=>{
+          const name = row[2], price = row[5];
+          if(typeof name === 'string' && name.trim() && typeof price === 'number'){
+            list.push({name:name.trim(), price:price, stock:0});
           }
-          if (p === 'custom') {
-            const s = customStart ? new Date(customStart + 'T00:00:00').getTime() : 0;
-            const e = customEnd ? new Date(customEnd + 'T23:59:59').getTime() : now;
-            return [s, e];
-          }
-          return [0, now];
-        }
-
-        function calcAmount(op, rates, qty, size, complexity) {
-          const r = rates[op.id] || {};
-          if (op.hasSize) {
-            const base = (r.sizes && r.sizes[size]) || 0;
-            return base * qty;
-          }
-          if (op.hasComplexity) {
-            const base = r.rate || 0;
-            const mult = (r.complexity && r.complexity[complexity]) || 1;
-            return base * mult * qty;
-          }
-          return (r.rate || 0) * qty;
-        }
-
-        // === ХРАНИЛИЩЕ (localStorage) ===
-        const storage = {
-          get: (key) => {
-            try {
-              const value = localStorage.getItem(key);
-              return Promise.resolve(value ? { value } : null);
-            } catch (e) {
-              return Promise.resolve(null);
-            }
-          },
-          set: (key, value) => {
-            try {
-              localStorage.setItem(key, value);
-              return Promise.resolve(true);
-            } catch (e) {
-              return Promise.resolve(false);
-            }
-          }
-        };
-        window.storage = storage;
-
-        async function getJSON(key, shared, fallback) {
-          try {
-            const res = await window.storage.get(key);
-            return res ? JSON.parse(res.value) : fallback;
-          } catch (e) {
-            return fallback;
-          }
-        }
-
-        async function setJSON(key, shared, value) {
-          try {
-            await window.storage.set(key, JSON.stringify(value));
-            return true;
-          } catch (e) {
-            return false;
-          }
-        }
-
-        // === ГЛАВНОЕ ПРИЛОЖЕНИЕ ===
-        function ShopFloorApp() {
-          const [booting, setBooting] = useState(true);
-          const [employees, setEmployees] = useState([]);
-          const [rates, setRates] = useState(DEFAULT_RATES);
-          const [screen, setScreen] = useState('select');
-          const [currentEmployee, setCurrentEmployee] = useState(null);
-          const [entries, setEntries] = useState([]);
-          const [entriesLoading, setEntriesLoading] = useState(false);
-          const [newName, setNewName] = useState('');
-          const [order, setOrder] = useState('');
-          const [openOp, setOpenOp] = useState(null);
-          const [qty, setQty] = useState(1);
-          const [size, setSize] = useState('small');
-          const [complexity, setComplexity] = useState('normal');
-          const [pinInput, setPinInput] = useState('');
-          const [pinError, setPinError] = useState(false);
-          const [managerTab, setManagerTab] = useState('totals');
-          const [period, setPeriod] = useState('today');
-          const [managerData, setManagerData] = useState({});
-          const [managerLoading, setManagerLoading] = useState(false);
-          const [editRates, setEditRates] = useState(null);
-          const [saveMsg, setSaveMsg] = useState('');
-          const [exportSelected, setExportSelected] = useState({});
-          const [exportPeriod, setExportPeriod] = useState('today');
-          const [exportStart, setExportStart] = useState(toDateInputValue(Date.now()));
-          const [exportEnd, setExportEnd] = useState(toDateInputValue(Date.now()));
-          const [exportBusy, setExportBusy] = useState(false);
-          const [exportMsg, setExportMsg] = useState('');
-          const [opStartTs, setOpStartTs] = useState(null);
-          const [opEndTs, setOpEndTs] = useState(null);
-          const [tick, setTick] = useState(0);
-          const [shifts, setShifts] = useState([]);
-
-          useEffect(() => {
-            (async () => {
-              const emp = await getJSON('shop:employees', true, []);
-              const r = await getJSON('shop:rates', true, DEFAULT_RATES);
-              setEmployees(emp);
-              setRates(r);
-              setBooting(false);
-            })();
-          }, []);
-
-          useEffect(() => {
-            if (currentEmployee) {
-              loadEntries(currentEmployee.id);
-              loadShifts(currentEmployee.id);
-            }
-          }, [currentEmployee]);
-
-          const loadEntries = async (empId) => {
-            setEntriesLoading(true);
-            const list = await getJSON(`shop:entries:${empId}`, true, []);
-            setEntries(list);
-            setEntriesLoading(false);
-          };
-
-          const loadShifts = async (empId) => {
-            const list = await getJSON(`shop:shifts:${empId}`, true, []);
-            setShifts(list);
-          };
-
-          const currentShift = shifts.find((s) => s.endTs == null) || null;
-
-          useEffect(() => {
-            if (!currentShift) return;
-            const iv = setInterval(() => setTick((t) => t + 1), 30000);
-            return () => clearInterval(iv);
-          }, [currentShift]);
-
-          const startShift = async () => {
-            if (currentShift || !currentEmployee) return;
-            const rec = { id: 's_' + Date.now(), startTs: Date.now(), endTs: null };
-            const list = [rec, ...shifts];
-            setShifts(list);
-            await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
-          };
-
-          const endShift = async () => {
-            if (!currentShift || !currentEmployee) return;
-            const list = shifts.map((s) => (s.id === currentShift.id ? { ...s, endTs: Date.now() } : s));
-            setShifts(list);
-            await setJSON(`shop:shifts:${currentEmployee.id}`, true, list);
-          };
-
-          const addEmployee = async () => {
-            const name = newName.trim();
-            if (!name) return;
-            const id = 'e_' + Date.now();
-            const list = [...employees, { id, name }];
-            setEmployees(list);
-            await setJSON('shop:employees', true, list);
-            setNewName('');
-            setCurrentEmployee({ id, name });
-            setScreen('employee');
-          };
-
-          const pickEmployee = (emp) => {
-            setCurrentEmployee(emp);
-            setScreen('employee');
-          };
-
-          const openOperation = (op) => {
-            setOpenOp(op);
-            setQty(1);
-            setSize('small');
-            setComplexity('normal');
-            setOpStartTs(null);
-            setOpEndTs(null);
-          };
-
-          const toggleOpTimer = () => {
-            if (!opStartTs) {
-              setOpStartTs(Date.now());
-              setOpEndTs(null);
-            } else if (!opEndTs) {
-              setOpEndTs(Date.now());
-            } else {
-              setOpStartTs(Date.now());
-              setOpEndTs(null);
-            }
-          };
-
-          useEffect(() => {
-            if (!opStartTs || opEndTs) return;
-            const iv = setInterval(() => setTick((t) => t + 1), 1000);
-            return () => clearInterval(iv);
-          }, [opStartTs, opEndTs]);
-
-          const confirmEntry = async () => {
-            if (!openOp) return;
-            const amount = calcAmount(openOp, rates, qty, size, complexity);
-            const finalEnd = opStartTs ? (opEndTs || Date.now()) : null;
-            const durationSec = opStartTs ? Math.max(0, Math.round((finalEnd - opStartTs) / 1000)) : null;
-            const entry = {
-              id: 'x_' + Date.now(),
-              ts: Date.now(),
-              order: order.trim() || '—',
-              opId: openOp.id,
-              qty,
-              size: openOp.hasSize ? size : null,
-              complexity: openOp.hasComplexity ? complexity : null,
-              amount,
-              startTs: opStartTs,
-              endTs: finalEnd,
-              durationSec,
-            };
-            const list = [entry, ...entries];
-            setEntries(list);
-            await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
-            setOpenOp(null);
-            setOpStartTs(null);
-            setOpEndTs(null);
-          };
-
-          const deleteEntry = async (id) => {
-            const list = entries.filter((e) => e.id !== id);
-            setEntries(list);
-            await setJSON(`shop:entries:${currentEmployee.id}`, true, list);
-          };
-
-          const todayEntries = entries.filter((e) => todayKey(e.ts) === todayKey(Date.now()));
-          const todayTotal = todayEntries.reduce((s, e) => s + e.amount, 0);
-          const todayLabel = formatDate(Date.now());
-
-          const tryManagerLogin = () => {
-            if (pinInput === MANAGER_PIN) {
-              setScreen('manager');
-              setPinInput('');
-              setPinError(false);
-            } else {
-              setPinError(true);
-            }
-          };
-
-          const loadManagerData = useCallback(async () => {
-            setManagerLoading(true);
-            const start = (() => {
-              const d = new Date();
-              if (period === 'today') { d.setHours(0,0,0,0); return d.getTime(); }
-              if (period === 'week') { const day = (d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d.getTime(); }
-              return 0;
-            })();
-            const data = {};
-            for (const emp of employees) {
-              const list = await getJSON(`shop:entries:${emp.id}`, true, []);
-              const filtered = list.filter((e) => e.ts >= start);
-              data[emp.id] = {
-                entries: filtered.sort((a,b) => b.ts - a.ts),
-                total: filtered.reduce((s,e) => s + e.amount, 0),
-              };
-            }
-            setManagerData(data);
-            setManagerLoading(false);
-          }, [employees, period]);
-
-          useEffect(() => {
-            if (screen === 'manager' && managerTab === 'totals') loadManagerData();
-          }, [screen, managerTab, period, loadManagerData]);
-
-          useEffect(() => {
-            if (screen === 'manager' && managerTab === 'rates') {
-              setEditRates(JSON.parse(JSON.stringify(rates)));
-            }
-          }, [screen, managerTab, rates]);
-
-          useEffect(() => {
-            if (screen === 'manager' && managerTab === 'export') {
-              setExportSelected((prev) => {
-                const next = { ...prev };
-                employees.forEach((emp) => {
-                  if (!(emp.id in next)) next[emp.id] = true;
-                });
-                return next;
-              });
-            }
-          }, [screen, managerTab, employees]);
-
-          const toggleExportEmployee = (id) => {
-            setExportSelected((prev) => ({ ...prev, [id]: !prev[id] }));
-          };
-
-          const toggleExportAll = () => {
-            const allOn = employees.every((emp) => exportSelected[emp.id]);
-            const next = {};
-            employees.forEach((emp) => { next[emp.id] = !allOn; });
-            setExportSelected(next);
-          };
-
-          const generateExcelReport = async () => {
-            const chosen = employees.filter((emp) => exportSelected[emp.id]);
-            if (chosen.length === 0) {
-              setExportMsg('Выберите хотя бы одного сотрудника');
-              setTimeout(() => setExportMsg(''), 2500);
-              return;
-            }
-            setExportBusy(true);
-            setExportMsg('');
-            try {
-              const [start, end] = getRange(exportPeriod, exportStart, exportEnd);
-              const rows = [];
-              const summary = [];
-              const shiftRows = [];
-              for (const emp of chosen) {
-                const list = await getJSON(`shop:entries:${emp.id}`, true, []);
-                const filtered = list.filter((e) => e.ts >= start && e.ts <= end);
-                filtered.forEach((e) => {
-                  const op = OPS.find((o) => o.id === e.opId);
-                  rows.push({
-                    'Дата': new Date(e.ts).toLocaleDateString('ru-RU'),
-                    'Время': new Date(e.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-                    'Сотрудник': emp.name,
-                    'Заказ': e.order,
-                    'Операция': op ? op.name : e.opId,
-                    'Количество': e.qty,
-                    'Ед.': op ? op.unit : '',
-                    'Время на операцию': e.durationSec != null ? formatHMS(e.durationSec) : '',
-                    'Сумма, ₽': Math.round(e.amount),
-                  });
-                });
-                summary.push({
-                  'Сотрудник': emp.name,
-                  'Операций': filtered.length,
-                  'Сумма, ₽': Math.round(filtered.reduce((s, e) => s + e.amount, 0)),
-                });
-
-                const shiftList = await getJSON(`shop:shifts:${emp.id}`, true, []);
-                const filteredShifts = shiftList.filter((s) => s.startTs >= start && s.startTs <= end);
-                filteredShifts.forEach((s) => {
-                  const durSec = s.endTs ? Math.round((s.endTs - s.startTs) / 1000) : null;
-                  shiftRows.push({
-                    'Сотрудник': emp.name,
-                    'Дата': new Date(s.startTs).toLocaleDateString('ru-RU'),
-                    'Начало': formatTime(s.startTs),
-                    'Конец': s.endTs ? formatTime(s.endTs) : 'не завершена',
-                    'Длительность': durSec != null ? formatHMS(durSec) : '—',
-                  });
-                });
-              }
-              rows.sort((a, b) => (a['Дата'] + a['Время']).localeCompare(b['Дата'] + b['Время']));
-              shiftRows.sort((a, b) => (a['Дата'] + a['Начало']).localeCompare(b['Дата'] + b['Начало']));
-              summary.push({
-                'Сотрудник': 'ИТОГО',
-                'Операций': summary.reduce((s, r) => s + r['Операций'], 0),
-                'Сумма, ₽': summary.reduce((s, r) => s + r['Сумма, ₽'], 0),
-              });
-
-              const wb = XLSX.utils.book_new();
-              const wsSummary = XLSX.utils.json_to_sheet(summary);
-              wsSummary['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
-              XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка');
-
-              const wsRows = XLSX.utils.json_to_sheet(rows);
-              wsRows['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 7 }, { wch: 14 }, { wch: 11 }];
-              XLSX.utils.book_append_sheet(wb, wsRows, 'Операции');
-
-              const wsShifts = XLSX.utils.json_to_sheet(shiftRows);
-              wsShifts['!cols'] = [{ wch: 20 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 14 }];
-              XLSX.utils.book_append_sheet(wb, wsShifts, 'Смены');
-
-              const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-              const blob = new Blob([wbout], { type: 'application/octet-stream' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              const periodLabel = exportPeriod === 'custom' ? `${exportStart}_${exportEnd}` : exportPeriod;
-              a.href = url;
-              a.download = `отчет_цех_${periodLabel}.xlsx`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-              setExportMsg(rows.length ? '✅ Файл скачан' : '✅ Файл скачан (данных за период не найдено)');
-            } catch (e) {
-              setExportMsg('❌ Не получилось сформировать файл');
-            }
-            setExportBusy(false);
-            setTimeout(() => setExportMsg(''), 3000);
-          };
-
-          const saveRates = async () => {
-            setRates(editRates);
-            await setJSON('shop:rates', true, editRates);
-            setSaveMsg('✅ Расценки сохранены');
-            setTimeout(() => setSaveMsg(''), 2000);
-          };
-
-          // === СТИЛИ ===
-          const bg = '#1c1f22';
-          const panel = '#262b30';
-          const panelAlt = '#2f353b';
-          const border = '#3a4149';
-          const text = '#f2f1ec';
-          const textDim = '#9aa4ad';
-          const accent = '#ff6a2b';
-          const accentDim = 'rgba(255,106,43,0.16)';
-          const good = '#4caf7d';
-          const bad = '#e5484d';
-
-          const styles = {
-            root: {
-              background: bg,
-              color: text,
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-              minHeight: '100vh',
-              maxWidth: 460,
-              margin: '0 auto',
-              padding: 16,
-              position: 'relative',
-            },
-            companyLabel: {
-              position: 'absolute',
-              top: 14,
-              right: 16,
-              fontSize: 10.5,
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-              color: textDim,
-              zIndex: 1,
-            },
-            header: {
-              padding: '10px 0',
-              borderBottom: `1px solid ${border}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            },
-            eyebrow: {
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: textDim,
-              fontWeight: 600,
-            },
-            h1: { fontSize: 18, fontWeight: 700, margin: '2px 0 0' },
-            body: { padding: '10px 0' },
-            button: {
-              background: panelAlt,
-              color: text,
-              border: `1px solid ${border}`,
-              borderRadius: 10,
-              padding: '12px 14px',
-              fontSize: 15,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              width: '100%',
-              textAlign: 'left',
-            },
-            primaryButton: {
-              background: accent,
-              color: '#1c1206',
-              border: 'none',
-              borderRadius: 10,
-              padding: '13px 16px',
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: 'pointer',
-              width: '100%',
-            },
-            input: {
-              background: panelAlt,
-              color: text,
-              border: `1px solid ${border}`,
-              borderRadius: 10,
-              padding: '11px 12px',
-              fontSize: 15,
-              width: '100%',
-              boxSizing: 'border-box',
-            },
-            card: {
-              background: panel,
-              border: `1px solid ${border}`,
-              borderRadius: 12,
-              padding: 14,
-            },
-            money: {
-              fontFamily: "'SF Mono', 'Roboto Mono', ui-monospace, monospace",
-              fontVariantNumeric: 'tabular-nums',
-            },
-          };
-
-          if (booting) {
-            return <div style={styles.root}><div style={styles.companyLabel}>{COMPANY_NAME}</div><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Загрузка...</div></div>;
-          }
-
-          // === ЭКРАН ВЫБОРА СОТРУДНИКА ===
-          if (screen === 'select') {
-            return (
-              <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
-                <div style={styles.header}>
-                  <div>
-                    <div style={styles.eyebrow}>Цех · учёт операций</div>
-                    <div style={styles.h1}>Кто работает?</div>
-                    <div style={{ fontSize: 12, color: textDim, marginTop: 3 }}>{todayLabel}</div>
-                  </div>
-                </div>
-                <div style={styles.body}>
-                  {employees.length === 0 && (
-                    <div style={{ color: textDim, fontSize: 13, marginBottom: 8 }}>Пока никого нет. Добавьте первого сотрудника ниже.</div>
-                  )}
-                  {employees.map((emp) => (
-                    <button key={emp.id} style={{ ...styles.button, marginBottom: 6 }} onClick={() => pickEmployee(emp)}>
-                      <span style={{
-                        width: 30, height: 30, borderRadius: '50%', background: accentDim, color: accent,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
-                      }}>
-                        {emp.name.trim().charAt(0).toUpperCase()}
-                      </span>
-                      {emp.name}
-                    </button>
-                  ))}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                    <input
-                      style={styles.input}
-                      placeholder="Имя нового сотрудника"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addEmployee()}
-                    />
-                    <button style={{ ...styles.primaryButton, width: 'auto', padding: '11px 16px' }} onClick={addEmployee}>
-                      ➕
-                    </button>
-                  </div>
-                  <button
-                    style={{ ...styles.button, marginTop: 12, justifyContent: 'center', color: textDim }}
-                    onClick={() => setScreen('pin')}
-                  >
-                    🔒 Режим руководителя
-                  </button>
-                </div>
-              </div>
-            );
-          }
-
-          // === ЭКРАН PIN ===
-          if (screen === 'pin') {
-            return (
-              <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
-                <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setPinError(false); setPinInput(''); }}>
-                    ←
-                  </button>
-                  <div style={{ ...styles.h1, fontSize: 15 }}>Код руководителя</div>
-                  <div style={{ width: 30 }} />
-                </div>
-                <div style={styles.body}>
-                  <input
-                    style={styles.input}
-                    type="password"
-                    inputMode="numeric"
-                    placeholder="Введите код"
-                    value={pinInput}
-                    onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
-                    onKeyDown={(e) => e.key === 'Enter' && tryManagerLogin()}
-                    autoFocus
-                  />
-                  {pinError && <div style={{ color: bad, fontSize: 13, marginTop: 8 }}>Неверный код. Попробуйте ещё раз.</div>}
-                  <button style={{ ...styles.primaryButton, marginTop: 12 }} onClick={tryManagerLogin}>Войти</button>
-                </div>
-              </div>
-            );
-          }
-
-          // === ЭКРАН СОТРУДНИКА ===
-          if (screen === 'employee' && currentEmployee) {
-            return (
-              <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
-                <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => { setScreen('select'); setCurrentEmployee(null); setOrder(''); }}>
-                    ←
-                  </button>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={styles.eyebrow}>{currentEmployee.name}</div>
-                    <div style={{ ...styles.h1, ...styles.money, color: accent }}>{money(todayTotal)}</div>
-                  </div>
-                  <div style={{ width: 30 }} />
-                </div>
-
-                <div style={styles.body}>
-                  {/* Блок смены */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: panelAlt, border: `1px solid ${border}`, borderRadius: 10,
-                    padding: '10px 12px', marginBottom: 12,
-                  }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: textDim }}>{currentShift ? 'Смена идёт' : 'Смена не начата'}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>
-                        {currentShift
-                          ? `с ${formatTime(currentShift.startTs)} · ${formatShiftDuration(Math.floor((Date.now() - currentShift.startTs) / 1000))}`
-                          : '—'}
-                      </div>
-                    </div>
-                    <button
-                      style={{
-                        ...styles.button, width: 'auto', padding: '8px 14px',
-                        background: currentShift ? 'rgba(229,72,77,0.14)' : accentDim,
-                        border: `1px solid ${currentShift ? bad : accent}`,
-                        color: currentShift ? bad : accent,
-                      }}
-                      onClick={currentShift ? endShift : startShift}
-                    >
-                      {currentShift ? '🚪 Закончить' : '🚪 Начать'}
-                    </button>
-                  </div>
-
-                  <input
-                    style={{ ...styles.input, marginBottom: 12 }}
-                    placeholder="Номер заказа"
-                    value={order}
-                    onChange={(e) => setOrder(e.target.value)}
-                  />
-
-                  {/* Список операций */}
-                  {!openOp && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {OPS.map((op) => (
-                        <button key={op.id} style={{ ...styles.button, flexDirection: 'column', alignItems: 'flex-start', gap: 4, minHeight: 60 }} onClick={() => openOperation(op)}>
-                          <span style={{ fontSize: 14, fontWeight: 600 }}>{op.name}</span>
-                          <span style={{ fontSize: 11, color: textDim }}>{op.unit}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Окно операции */}
-                  {openOp && (
-                    <div style={{ ...styles.card, marginTop: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <span style={{ fontWeight: 700, fontSize: 16 }}>{openOp.name}</span>
-                        <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setOpenOp(null)}>✕</button>
-                      </div>
-
-                      {/* Таймер */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        background: panelAlt, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 10.5, color: textDim }}>⏱ Время на операцию</div>
-                          <div style={{ fontSize: 18, fontWeight: 700, ...styles.money }}>
-                            {opStartTs ? formatDuration(Math.floor(((opEndTs || Date.now()) - opStartTs) / 1000)) : '—'}
-                          </div>
-                        </div>
-                        <button
-                          style={{
-                            ...styles.button, width: 'auto', padding: '6px 12px',
-                            background: !opStartTs || opEndTs ? accentDim : 'rgba(229,72,77,0.14)',
-                            border: `1px solid ${!opStartTs || opEndTs ? accent : bad}`,
-                            color: !opStartTs || opEndTs ? accent : bad,
-                          }}
-                          onClick={toggleOpTimer}
-                        >
-                          {!opStartTs ? '▶' : !opEndTs ? '⏸' : '⟳'}
-                        </button>
-                      </div>
-
-                      {/* Размер */}
-                      {openOp.hasSize && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Размер фасада</div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {Object.keys(SIZE_LABELS).map((s) => (
-                              <button key={s} onClick={() => setSize(s)} style={{
-                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                                border: `1px solid ${s === size ? accent : border}`,
-                                background: s === size ? accentDim : panelAlt,
-                                color: s === size ? accent : text,
-                              }}>{SIZE_LABELS[s]}</button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Сложность */}
-                      {openOp.hasComplexity && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Материал</div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {Object.keys(COMPLEXITY_LABELS).map((c) => (
-                              <button key={c} onClick={() => setComplexity(c)} style={{
-                                flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                                border: `1px solid ${c === complexity ? accent : border}`,
-                                background: c === complexity ? accentDim : panelAlt,
-                                color: c === complexity ? accent : text,
-                              }}>{COMPLEXITY_LABELS[c]}</button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Количество */}
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 12, color: textDim, marginBottom: 4 }}>Количество, {openOp.unit}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => Math.max(1, q - 1))}>
-                            −
-                          </button>
-                          <span style={{ fontSize: 22, fontWeight: 700, minWidth: 40, textAlign: 'center', ...styles.money }}>{qty}</span>
-                          <button style={{ ...styles.button, width: 40, height: 40, padding: 0, justifyContent: 'center' }} onClick={() => setQty((q) => q + 1)}>
-                            +
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Сумма */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${border}`, paddingTop: 10, marginBottom: 12 }}>
-                        <span style={{ fontSize: 13, color: textDim }}>Начислится</span>
-                        <span style={{ fontSize: 20, fontWeight: 700, color: good, ...styles.money }}>
-                          +{money(calcAmount(openOp, rates, qty, size, complexity))}
-                        </span>
-                      </div>
-
-                      <button style={styles.primaryButton} onClick={confirmEntry}>✅ Добавить запись</button>
-                    </div>
-                  )}
-
-                  {/* Записи за сегодня */}
-                  <div style={{ marginTop: 18 }}>
-                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>{todayLabel} · {todayEntries.length} записей</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {todayEntries.map((e) => {
-                        const op = OPS.find((o) => o.id === e.opId);
-                        return (
-                          <div key={e.id} style={{ ...styles.card, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600 }}>{op ? op.name : e.opId}</div>
-                              <div style={{ fontSize: 11, color: textDim }}>
-                                Заказ {e.order} · {e.qty} {op ? op.unit : ''}
-                                {e.size ? `, ${SIZE_LABELS[e.size]}` : ''}
-                                {e.complexity && e.complexity !== 'normal' ? `, ${COMPLEXITY_LABELS[e.complexity]}` : ''}
-                                {e.durationSec != null ? ` · ${formatDuration(e.durationSec)}` : ''}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: good, ...styles.money }}>{money(e.amount)}</span>
-                              <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', padding: 4 }} onClick={() => deleteEntry(e.id)}>🗑</button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {todayEntries.length === 0 && (
-                        <div style={{ color: textDim, fontSize: 13 }}>Записей ещё нет. Выберите операцию выше.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          // === ЭКРАН РУКОВОДИТЕЛЯ ===
-          if (screen === 'manager') {
-            return (
-              <div style={styles.root}>
-                <div style={styles.companyLabel}>{COMPANY_NAME}</div>
-                <div style={styles.header}>
-                  <button style={{ background: 'none', border: 'none', color: textDim, cursor: 'pointer', fontSize: 18 }} onClick={() => setScreen('select')}>←</button>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>👥</span>
-                    <div style={{ ...styles.h1, fontSize: 15 }}>Руководитель</div>
-                  </div>
-                  <div style={{ width: 30 }} />
-                </div>
-
-                <div style={{ display: 'flex', borderBottom: `1px solid ${border}`, marginBottom: 12 }}>
-                  {[['totals', 'Сводка'], ['export', 'В Excel'], ['rates', 'Расценки']].map(([id, label]) => (
-                    <button key={id} onClick={() => setManagerTab(id)} style={{
-                      flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer',
-                      color: managerTab === id ? accent : textDim,
-                      borderBottom: managerTab === id ? `2px solid ${accent}` : '2px solid transparent',
-                      fontSize: 13, fontWeight: 700,
-                    }}>{label}</button>
-                  ))}
-                </div>
-
-                {managerTab === 'totals' && (
-                  <div>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                      {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время']].map(([id, label]) => (
-                        <button key={id} onClick={() => setPeriod(id)} style={{
-                          flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                          border: `1px solid ${period === id ? accent : border}`,
-                          background: period === id ? accentDim : panelAlt,
-                          color: period === id ? accent : text,
-                        }}>{label}</button>
-                      ))}
-                    </div>
-
-                    {managerLoading && <div style={{ color: textDim, textAlign: 'center', padding: 20 }}>Загрузка...</div>}
-
-                    {employees.map((emp) => {
-                      const d = managerData[emp.id] || { entries: [], total: 0 };
-                      return (
-                        <div key={emp.id} style={{ ...styles.card, marginBottom: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 600 }}>{emp.name}</span>
-                            <span style={{ fontWeight: 700, color: good, ...styles.money }}>{money(d.total)}</span>
-                          </div>
-                          <div style={{ fontSize: 12, color: textDim }}>{d.entries.length} операций</div>
-                        </div>
-                      );
-                    })}
-
-                    {employees.length > 0 && (
-                      <div style={{ ...styles.card, background: panelAlt, marginTop: 8 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600 }}>Итого по цеху</span>
-                          <span style={{ fontWeight: 700, ...styles.money }}>
-                            {money(Object.values(managerData).reduce((s, d) => s + (d.total || 0), 0))}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <button style={{ ...styles.button, marginTop: 10, justifyContent: 'center', fontSize: 12 }} onClick={loadManagerData}>
-                      🔄 Обновить
-                    </button>
-                  </div>
-                )}
-
-                {managerTab === 'export' && (
-                  <div>
-                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Сотрудники</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-                      <button style={{ ...styles.button, padding: '8px 12px', fontSize: 12.5, color: textDim, justifyContent: 'space-between' }} onClick={toggleExportAll}>
-                        Выбрать всех / снять всех
-                        <span>✅</span>
-                      </button>
-                      {employees.map((emp) => {
-                        const checked = !!exportSelected[emp.id];
-                        return (
-                          <button key={emp.id} onClick={() => toggleExportEmployee(emp.id)} style={{
-                            ...styles.button, justifyContent: 'space-between',
-                            border: `1px solid ${checked ? accent : border}`,
-                            background: checked ? accentDim : panelAlt,
-                            color: checked ? accent : text,
-                          }}>
-                            {emp.name}
-                            {checked && <span>✅</span>}
-                          </button>
-                        );
-                      })}
-                      {employees.length === 0 && <div style={{ color: textDim, fontSize: 13 }}>Сотрудников пока нет.</div>}
-                    </div>
-
-                    <div style={{ ...styles.eyebrow, marginBottom: 8 }}>Период</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-                      {[['today', 'Сегодня'], ['week', 'Неделя'], ['all', 'Всё время'], ['custom', 'Свой период']].map(([id, label]) => (
-                        <button key={id} onClick={() => setExportPeriod(id)} style={{
-                          padding: '8px 4px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-                          border: `1px solid ${exportPeriod === id ? accent : border}`,
-                          background: exportPeriod === id ? accentDim : panelAlt,
-                          color: exportPeriod === id ? accent : text,
-                        }}>{label}</button>
-                      ))}
-                    </div>
-
-                    {exportPeriod === 'custom' && (
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>С</div>
-                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10.5, color: textDim, marginBottom: 3 }}>По</div>
-                          <input style={{ ...styles.input, padding: '7px 8px', fontSize: 13 }} type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
-                        </div>
-                      </div>
-                    )}
-
-                    <button style={{ ...styles.primaryButton, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={generateExcelReport} disabled={exportBusy}>
-                      {exportBusy ? '⏳' : '📊'}
-                      {exportBusy ? 'Формирую...' : 'Сформировать отчёт'}
-                    </button>
-                    {exportMsg && (
-                      <div style={{ color: exportMsg.includes('✅') ? good : textDim, fontSize: 13, marginTop: 10, textAlign: 'center' }}>
-                        {exportMsg}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {managerTab === 'rates' && editRates && (
-                  <div>
-                    <div style={{ fontSize: 12, color: textDim, marginBottom: 12 }}>Изменение расценок — только для новых записей.</div>
-                    {OPS.map((op) => (
-                      <div key={op.id} style={{ ...styles.card, marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{op.name}</div>
-                        {op.hasSize ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {Object.keys(SIZE_LABELS).map((s) => (
-                              <div key={s} style={{ flex: 1 }}>
-                                <div style={{ fontSize: 10, color: textDim }}>{SIZE_LABELS[s]}</div>
-                                <input
-                                  style={{ ...styles.input, padding: '6px', fontSize: 13 }}
-                                  type="number"
-                                  value={editRates.assembly.sizes[s]}
-                                  onChange={(e) => setEditRates((prev) => ({
-                                    ...prev,
-                                    assembly: { ...prev.assembly, sizes: { ...prev.assembly.sizes, [s]: Number(e.target.value) } },
-                                  }))}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        ) : op.hasComplexity ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 10, color: textDim }}>Базовая ставка</div>
-                              <input
-                                style={{ ...styles.input, padding: '6px', fontSize: 13 }}
-                                type="number"
-                                value={editRates.glass_cut.rate}
-                                onChange={(e) => setEditRates((prev) => ({ ...prev, glass_cut: { ...prev.glass_cut, rate: Number(e.target.value) } }))}
-                              />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 10, color: textDim }}>Коэф. капризное</div>
-                              <input
-                                style={{ ...styles.input, padding: '6px', fontSize: 13 }}
-                                type="number"
-                                step="0.1"
-                                value={editRates.glass_cut.complexity.moro}
-                                onChange={(e) => setEditRates((prev) => ({
-                                  ...prev,
-                                  glass_cut: { ...prev.glass_cut, complexity: { ...prev.glass_cut.complexity, moro: Number(e.target.value) } },
-                                }))}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <input
-                            style={{ ...styles.input, padding: '6px', fontSize: 13 }}
-                            type="number"
-                            value={editRates[op.id].rate}
-                            onChange={(e) => setEditRates((prev) => ({ ...prev, [op.id]: { ...prev[op.id], rate: Number(e.target.value) } }))}
-                          />
-                        )}
-                      </div>
-                    ))}
-                    <button style={styles.primaryButton} onClick={saveRates}>💾 Сохранить расценки</button>
-                    {saveMsg && <div style={{ color: good, marginTop: 8, textAlign: 'center' }}>{saveMsg}</div>}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          return <div style={styles.root}><div style={styles.companyLabel}>{COMPANY_NAME}</div><div style={{ textAlign: 'center', padding: 40, color: textDim }}>Ошибка загрузки</div></div>;
-        }
-
-        // === ЗАПУСК ===
-        ReactDOM.createRoot(document.getElementById('root')).render(<ShopFloorApp />);
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+        });
+        if(list.length){ catalog.glass = list; touched.push('Лист2 → Стекло (3-е число)'); }
+      }
+
+      renderAll();
+      document.getElementById('saveStatus').textContent = touched.length
+        ? `Загружено: ${touched.join(', ')} — не забудьте «Сохранить каталог»`
+        : 'Не нашёл знакомых листов в файле';
+      setTimeout(()=>document.getElementById('saveStatus').textContent="",5000);
+    }catch(err){
+      alert('Не удалось прочитать файл. Проверьте формат.');
+    }
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+/* ---------- facade cards ---------- */
+
+function facadeCardHtml(f, i){
+  const posLabels = {bottom:'Снизу', center:'По центру', top:'Сверху'};
+  const sideMismatch = (f.leftQty + f.rightQty) !== f.qty;
+  const profile = catalog.profiles[f.profileIdx] || {system:'РУ'};
+  const system = profile.system || 'РУ';
+  const hingeOptions = catalog.hinges
+    .map((h,hi)=>({h,hi}))
+    .filter(o=>o.h.system===system || o.h.system==='both');
+
+  return `
+  <div class="facade-card" data-idx="${i}">
+    <div class="facade-card-header">
+      <span class="facade-title">Фасад ${i+1}</span>
+      ${facades.length>1 ? `<button class="remove-facade-btn" data-remove-facade="${i}">Удалить ×</button>` : ''}
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Ширина, мм</label><input type="number" data-idx="${i}" data-field="width" value="${f.width}" min="100" step="1"></div>
+      <div class="field"><label>Высота, мм</label><input type="number" data-idx="${i}" data-field="height" value="${f.height}" min="100" step="1"></div>
+      <div class="field"><label>Количество, шт</label><input type="number" data-idx="${i}" data-field="qty" value="${f.qty}" min="1" step="1"></div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Тип профиля</label>
+        <select data-idx="${i}" data-field="profileIdx">${catalog.profiles.map((p,pi)=>`<option value="${pi}" ${pi==f.profileIdx?'selected':''}>${p.name} (${p.system}) — ${p.price}₽/м</option>`).join('')}</select>
+        <span class="system-badge">Система: ${system} · угол+винты ${system==='РШ'?catalog.cornerRSH:catalog.cornerRU}₽/компл.</span>
+      </div>
+      <div class="field"><label>Тип стекла</label>
+        <select data-idx="${i}" data-field="glassIdx">${catalog.glass.map((g,gi)=>`<option value="${gi}" ${gi==f.glassIdx?'selected':''}>${g.name} — ${g.price}₽/м²</option>`).join('')}</select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Кромка стекла</label>
+        <select data-idx="${i}" data-field="edgeIdx">${catalog.edges.map((ed,ei)=>`<option value="${ei}" ${ei==f.edgeIdx?'selected':''}>${ed.name}${ed.price>0?` — ${ed.price}₽/м`:''}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Упаковка</label>
+        <select data-idx="${i}" data-field="packagingIdx">${catalog.packaging.map((pk,pi)=>`<option value="${pi}" ${pi==f.packagingIdx?'selected':''}>${pk.name} — ${pk.price}₽/шт</option>`).join('')}</select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Плёнка на стекло</label>
+        <select data-idx="${i}" data-field="filmIdx">${catalog.films.map((fl,fi)=>`<option value="${fi}" ${fi==f.filmIdx?'selected':''}>${fl.name}${fl.price>0?` — ${fl.price}₽/м²`:''}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Пескоструй</label>
+        <select data-idx="${i}" data-field="sandblastIdx">${catalog.sandblast.map((sb,si)=>`<option value="${si}" ${si==f.sandblastIdx?'selected':''}>${sb.name}${sb.price>0?` — ${sb.price}₽`:''}</option>`).join('')}</select>
+      </div>
+    </div>
+
+    <div class="subhead">Покраска</div>
+    <div class="opt-group">
+      <button class="opt-btn ${!f.paintingNeeded?'active':''}" data-idx="${i}" data-opt="paintingNeeded" data-value="no">Не нужна</button>
+      <button class="opt-btn ${f.paintingNeeded?'active':''}" data-idx="${i}" data-opt="paintingNeeded" data-value="yes">Нужна (+${catalog.painting}₽)</button>
+    </div>
+
+    <div class="subhead">Петли</div>
+    <div class="opt-group">
+      <button class="opt-btn ${f.hingeMode==='none'?'active':''}" data-idx="${i}" data-opt="hingeMode" data-value="none">Без петель</button>
+      <button class="opt-btn ${f.hingeMode==='mill'?'active':''}" data-idx="${i}" data-opt="hingeMode" data-value="mill">Только фрезеровка</button>
+      <button class="opt-btn ${f.hingeMode==='install'?'active':''}" data-idx="${i}" data-opt="hingeMode" data-value="install">Установка петель</button>
+    </div>
+
+    ${f.hingeMode!=='none' ? `
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label>Кол-во позиций</label><input type="number" data-idx="${i}" data-field="hingeCount" value="${f.hingeCount}" min="0" step="1"></div>
+      ${f.hingeMode==='install' ? `<div class="field"><label>Тип петли (система ${system})</label><select data-idx="${i}" data-field="hingeTypeIdx">${hingeOptions.map(o=>`<option value="${o.hi}" ${o.hi==f.hingeTypeIdx?'selected':''}>${o.h.name} — ${o.h.price}₽/шт</option>`).join('')}</select></div>` : ''}
+    </div>
+    <div class="row">
+      <div class="field"><label>Левых (ЛЕВЫЙ), шт</label><input type="number" data-idx="${i}" data-field="leftQty" value="${f.leftQty}" min="0" step="1"></div>
+      <div class="field"><label>Правых (ПРАВЫЙ), шт</label><input type="number" data-idx="${i}" data-field="rightQty" value="${f.rightQty}" min="0" step="1"></div>
+    </div>
+    <div class="hint" id="sideWarn-${i}" style="color:var(--accent);${sideMismatch?'':'display:none;'}">⚠ Левых + правых = ${f.leftQty+f.rightQty}, а в позиции ${f.qty} шт. Поправьте, чтобы совпадало.</div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+      <button class="opt-btn" data-idx="${i}" data-confirm-sides="1">Подтверждаю разбивку ЛЕВЫЙ/ПРАВЫЙ</button>
+      <span id="sideStatus-${i}" class="${f.sidesConfirmed?'stock-ok':'stock-bad'}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${f.sidesConfirmed?'✓ подтверждено':'не подтверждено'}</span>
+    </div>
+    ` : ''}
+
+    <div class="subhead">Ручки</div>
+    <div class="opt-group">
+      <button class="opt-btn ${!f.handleNeeded?'active':''}" data-idx="${i}" data-opt="handleNeeded" data-value="no">Не нужны</button>
+      <button class="opt-btn ${f.handleNeeded?'active':''}" data-idx="${i}" data-opt="handleNeeded" data-value="yes">Нужны</button>
+    </div>
+
+    ${f.handleNeeded ? `
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label>Ориентация</label>
+        <div class="opt-group">
+          <button class="opt-btn ${f.handleOrientation==='horizontal'?'active':''}" data-idx="${i}" data-opt="handleOrientation" data-value="horizontal">Горизонтально</button>
+          <button class="opt-btn ${f.handleOrientation==='vertical'?'active':''}" data-idx="${i}" data-opt="handleOrientation" data-value="vertical">Вертикально</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Крепление</label>
+        <div class="opt-group">
+          <button class="opt-btn ${f.handlePlacement==='profile'?'active':''}" data-idx="${i}" data-opt="handlePlacement" data-value="profile">В профиле</button>
+          <button class="opt-btn ${f.handlePlacement==='glass'?'active':''}" data-idx="${i}" data-opt="handlePlacement" data-value="glass">В стекле</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Положение</label>
+        <div class="opt-group">
+          <button class="opt-btn ${f.handlePosition==='bottom'?'active':''}" data-idx="${i}" data-opt="handlePosition" data-value="bottom">Снизу</button>
+          <button class="opt-btn ${f.handlePosition==='center'?'active':''}" data-idx="${i}" data-opt="handlePosition" data-value="center">По центру</button>
+          <button class="opt-btn ${f.handlePosition==='top'?'active':''}" data-idx="${i}" data-opt="handlePosition" data-value="top">Сверху</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Тип ручки</label><select data-idx="${i}" data-field="handleTypeIdx">${catalog.handles.map((h,hi)=>`<option value="${hi}" ${hi==f.handleTypeIdx?'selected':''}>${h.name} — ${h.price}₽/шт</option>`).join('')}</select></div>
+      <div class="field"><label>Количество, шт</label><input type="number" data-idx="${i}" data-field="handleQty" value="${f.handleQty}" min="1" step="1"></div>
+    </div>
+    ${f.handlePlacement==='glass' ? `<div class="hint">Крепление в стекле = сверление + втулка на каждое отверстие, добавляются отдельными позициями в смету.</div>` : ''}
+    ` : ''}
+  </div>`;
+}
+
+function renderFacadesContainer(){
+  document.getElementById('facadesContainer').innerHTML = facades.map((f,i)=>facadeCardHtml(f,i)).join('');
+}
+function renderSingleCard(i){
+  const container = document.getElementById('facadesContainer');
+  const cardEl = container.querySelector(`.facade-card[data-idx="${i}"]`);
+  if(cardEl) cardEl.outerHTML = facadeCardHtml(facades[i], i);
+}
+function updateSideHint(i){
+  const f = facades[i];
+  const warn = document.getElementById(`sideWarn-${i}`);
+  if(warn){
+    const mismatch = (f.leftQty+f.rightQty) !== f.qty;
+    warn.style.display = mismatch ? 'block' : 'none';
+    warn.textContent = `⚠ Левых + правых = ${f.leftQty+f.rightQty}, а в позиции ${f.qty} шт. Поправьте, чтобы совпадало.`;
+  }
+  const status = document.getElementById(`sideStatus-${i}`);
+  if(status){
+    status.textContent = f.sidesConfirmed ? '✓ подтверждено' : 'не подтверждено';
+    status.className = f.sidesConfirmed ? 'stock-ok' : 'stock-bad';
+  }
+}
+
+document.getElementById('addFacadeBtn').addEventListener('click', ()=>{
+  facades.push(newFacade());
+  renderFacadesContainer();
+  calcAll();
+});
+
+const NUMERIC_FIELDS = ['width','height','qty','hingeCount','hingeTypeIdx','profileIdx','glassIdx','leftQty','rightQty','handleTypeIdx','handleQty','edgeIdx','packagingIdx','filmIdx','sandblastIdx'];
+
+document.getElementById('facadesContainer').addEventListener('input', e=>{
+  const t = e.target;
+  if(!t.dataset.field) return;
+  const idx = parseInt(t.dataset.idx);
+  const field = t.dataset.field;
+  let val = NUMERIC_FIELDS.includes(field) ? (parseFloat(t.value)||0) : t.value;
+  facades[idx][field] = val;
+  if(field==='height'){
+    facades[idx].hingeCount = suggestHingeCount(val);
+    const hc = document.querySelector(`.facade-card[data-idx="${idx}"] input[data-field="hingeCount"]`);
+    if(hc) hc.value = facades[idx].hingeCount;
+  }
+  if(field==='leftQty' || field==='rightQty' || field==='qty'){
+    facades[idx].sidesConfirmed = false;
+    updateSideHint(idx);
+  }
+  if(field==='profileIdx'){
+    // при смене профиля система могла поменяться — если текущая петля не подходит, переключаемся на первую подходящую
+    const profile = catalog.profiles[facades[idx].profileIdx] || {system:'РУ'};
+    const system = profile.system || 'РУ';
+    const currentHinge = catalog.hinges[facades[idx].hingeTypeIdx];
+    if(!currentHinge || (currentHinge.system!==system && currentHinge.system!=='both')){
+      const firstMatch = catalog.hinges.findIndex(h=>h.system===system || h.system==='both');
+      facades[idx].hingeTypeIdx = firstMatch>=0 ? firstMatch : 0;
+    }
+    renderSingleCard(idx);
+  }
+  calcAll();
+});
+
+document.getElementById('facadesContainer').addEventListener('change', e=>{
+  const t = e.target;
+  if(t.tagName!=='SELECT' || !t.dataset.field) return;
+  calcAll();
+});
+
+document.getElementById('facadesContainer').addEventListener('click', e=>{
+  const optBtn = e.target.closest('[data-opt]');
+  if(optBtn){
+    const idx = parseInt(optBtn.dataset.idx);
+    const opt = optBtn.dataset.opt;
+    let value = optBtn.dataset.value;
+    if(opt==='handleNeeded' || opt==='paintingNeeded') value = (value==='yes');
+    facades[idx][opt] = value;
+    if(opt==='hingeMode') facades[idx].sidesConfirmed = false;
+    renderSingleCard(idx);
+    calcAll();
+    return;
+  }
+  const confirmBtn = e.target.closest('[data-confirm-sides]');
+  if(confirmBtn){
+    const idx = parseInt(confirmBtn.dataset.idx);
+    const f = facades[idx];
+    if(f.leftQty+f.rightQty !== f.qty){
+      alert('Сумма левых и правых открываний должна совпадать с количеством фасадов в этой позиции.');
+      return;
+    }
+    f.sidesConfirmed = true;
+    updateSideHint(idx);
+    calcAll();
+    return;
+  }
+  const removeBtn = e.target.closest('[data-remove-facade]');
+  if(removeBtn){
+    const idx = parseInt(removeBtn.dataset.removeFacade);
+    facades.splice(idx,1);
+    renderFacadesContainer();
+    calcAll();
+    return;
+  }
+});
+
+/* ---------- calculation ---------- */
+
+function fmt(n){ return Math.round(n).toLocaleString('ru-RU') + ' ₽'; }
+function round2(n){ return Math.round(n*100)/100; }
+
+const orLabels = {horizontal:'горизонтально', vertical:'вертикально'};
+const placeLabels = {profile:'в профиле', glass:'в стекле'};
+const posLabelsRu = {bottom:'снизу', center:'по центру', top:'сверху'};
+
+function computeFacade(f){
+  const profile = catalog.profiles[f.profileIdx] || {name:'—',price:0,stock:0,system:'РУ'};
+  const system = profile.system || 'РУ';
+  const glass = catalog.glass[f.glassIdx] || {name:'—',price:0,stock:0};
+  const hinge = catalog.hinges[f.hingeTypeIdx] || {name:'—',price:0,stock:0,system:system};
+  const handle = catalog.handles[f.handleTypeIdx] || {name:'—',price:0,stock:0};
+  const edge = catalog.edges[f.edgeIdx] || {name:'Нет',price:0};
+  const film = catalog.films[f.filmIdx] || {name:'Нет',price:0};
+  const sandblast = catalog.sandblast[f.sandblastIdx] || {name:'Нет',price:0};
+  const packaging = catalog.packaging[f.packagingIdx] || {name:'—',price:0};
+  const wasteK = 1 + (catalog.waste||0)/100;
+
+  const perimeterM = 2*(f.width+f.height)/1000;
+  const profileCost = perimeterM * wasteK * profile.price;
+
+  const inset = 8;
+  const glassW = Math.max(0, f.width-2*inset), glassH = Math.max(0, f.height-2*inset);
+  const glassAreaM2 = glassW*glassH/1_000_000;
+  const glassCost = glassAreaM2 * glass.price;
+  const glassPerimeterM = 2*(glassW+glassH)/1000;
+
+  const sealantType = f.height > 1800 ? 'hard' : 'soft';
+  const sealantPrice = sealantType==='hard' ? catalog.sealantHard : catalog.sealantSoft;
+  const sealantCost = perimeterM * wasteK * sealantPrice;
+
+  const cornerPrice = system==='РШ' ? catalog.cornerRSH : catalog.cornerRU;
+  const cornersCost = 4 * cornerPrice;
+
+  let hingeCost = 0, hingeLabel = '';
+  if(f.hingeMode==='install'){ hingeCost = f.hingeCount*hinge.price; hingeLabel = `Петли (${hinge.name} × ${f.hingeCount})`; }
+  else if(f.hingeMode==='mill'){ hingeCost = f.hingeCount*catalog.mill; hingeLabel = `Фрезеровка под петли (× ${f.hingeCount})`; }
+
+  let handleCost = 0, drillCost = 0, bushingCost = 0, bushingQty = 0, profileDrillCost = 0;
+  if(f.handleNeeded){
+    handleCost = f.handleQty * handle.price;
+    if(f.handlePlacement==='glass'){
+      drillCost = f.handleQty * catalog.glassDrill;
+      bushingQty = f.handleQty;
+      bushingCost = bushingQty * catalog.bushing;
+    } else if(f.handlePlacement==='profile'){
+      profileDrillCost = f.handleQty * catalog.handleProfileDrill;
+    }
+  }
+
+  const edgeMaterialCost = edge.price>0 ? glassPerimeterM * edge.price : 0;
+  const edgeLaborCost = edge.price>0 ? catalog.edgeLabor : 0;
+  const edgeCost = edgeMaterialCost + edgeLaborCost;
+  const filmMaterialCost = film.price>0 ? glassAreaM2 * film.price : 0;
+  const filmLaborCost = film.price>0 ? catalog.filmLabor : 0;
+  const filmCost = filmMaterialCost + filmLaborCost;
+  const sandblastCost = sandblast.price;
+  const paintingCost = f.paintingNeeded ? catalog.painting : 0;
+  const packagingMaterialCost = packaging.price;
+  const packagingLaborCost = catalog.packagingLabor + (packaging.name==='Картон' ? catalog.packagingBoxLabor : 0);
+  const packagingCost = packagingMaterialCost + packagingLaborCost;
+  const baselineWorkCost = catalog.cutProfile + catalog.hardwareAssembly + catalog.prepProfile + catalog.assembleFacade + catalog.cutGlassWork;
+
+  const perUnit = profileCost+glassCost+sealantCost+cornersCost+hingeCost+handleCost+drillCost+bushingCost+profileDrillCost+edgeCost+filmCost+sandblastCost+paintingCost+packagingCost+baselineWorkCost;
+  const total = perUnit * f.qty;
+
+  const rows = [
+    ['Профиль '+profile.name+` (${perimeterM.toFixed(2)} м, система ${system})`, profileCost],
+    ['Стекло '+glass.name+` (${glassAreaM2.toFixed(2)} м²)`, glassCost],
+    [`Уплотнитель (${sealantType==='hard'?'жёсткий':'мягкий'})`, sealantCost],
+    [`Углы + винты (система ${system}, 4 компл.)`, cornersCost],
+    ['Нарезка профиля', catalog.cutProfile],
+    ['Сборка фурнитуры', catalog.hardwareAssembly],
+    ['Подготовка планок', catalog.prepProfile],
+    ['Сборка фасада', catalog.assembleFacade],
+    ['Резка стекла', catalog.cutGlassWork],
+  ];
+  if(hingeCost>0) rows.push([hingeLabel, hingeCost]);
+  if(handleCost>0) rows.push([`Ручка «${handle.name}» (${orLabels[f.handleOrientation]}, ${placeLabels[f.handlePlacement]}, ${posLabelsRu[f.handlePosition]}) × ${f.handleQty}`, handleCost]);
+  if(drillCost>0) rows.push([`Сверление стекла под ручку × ${f.handleQty}`, drillCost]);
+  if(bushingCost>0) rows.push([`Втулки под отверстия × ${bushingQty}`, bushingCost]);
+  if(profileDrillCost>0) rows.push([`Сверление профиля под ручку × ${f.handleQty}`, profileDrillCost]);
+  if(edgeCost>0) rows.push([`Кромка ${edge.name} (материал ${glassPerimeterM.toFixed(2)} м + работа)`, edgeCost]);
+  if(filmCost>0) rows.push([`Плёнка ${film.name} (${glassAreaM2.toFixed(2)} м² + работа)`, filmCost]);
+  if(sandblastCost>0) rows.push([sandblast.name, sandblastCost]);
+  if(paintingCost>0) rows.push(['Покраска', paintingCost]);
+  if(packagingCost>0) rows.push([`Упаковка (${packaging.name}, материал+работа)`, packagingCost]);
+
+  const specRows = [
+    { part:`Профиль «${profile.name}», вертикаль (рез 45°/45°)`, size:`${Math.round(f.height)}`, per:2 },
+    { part:`Профиль «${profile.name}», горизонталь (рез 45°/45°)`, size:`${Math.round(f.width)}`, per:2 },
+    { part:`Стекло «${glass.name}»`, size:`${Math.round(glassW)} × ${Math.round(glassH)}`, per:1 },
+    { part:`Уплотнитель ${sealantType==='hard'?'жёсткий':'мягкий'}, вертикаль`, size:`${Math.round(glassH)}`, per:2 },
+    { part:`Уплотнитель ${sealantType==='hard'?'жёсткий':'мягкий'}, горизонталь`, size:`${Math.round(glassW)}`, per:2 },
+    { part:`Угол + 2 винта (система ${system})`, size:`—`, per:4 },
+  ];
+  if(f.hingeMode==='install') specRows.push({ part:`Петля «${hinge.name}»`, size:`—`, per:f.hingeCount });
+  else if(f.hingeMode==='mill') specRows.push({ part:`Фрезеровка под петлю`, size:`отверстие`, per:f.hingeCount });
+  if(f.handleNeeded){
+    specRows.push({ part:`Ручка «${handle.name}» (${orLabels[f.handleOrientation]}, ${placeLabels[f.handlePlacement]}, ${posLabelsRu[f.handlePosition]})`, size:`—`, per:f.handleQty });
+    if(f.handlePlacement==='glass'){
+      specRows.push({ part:`Сверление стекла под ручку`, size:`отверстие`, per:f.handleQty });
+      specRows.push({ part:`Втулка под отверстие`, size:`—`, per:f.handleQty });
+    } else if(f.handlePlacement==='profile'){
+      specRows.push({ part:`Сверление профиля под ручку`, size:`отверстие`, per:f.handleQty });
+    }
+  }
+  if(edge.price>0) specRows.push({ part:`Кромка ${edge.name}`, size:`${glassPerimeterM.toFixed(2)} м`, per:1 });
+  if(film.price>0) specRows.push({ part:`Плёнка ${film.name}`, size:`${glassAreaM2.toFixed(2)} м²`, per:1 });
+  if(sandblast.price>0) specRows.push({ part:sandblast.name, size:`услуга`, per:1 });
+  if(f.paintingNeeded) specRows.push({ part:`Покраска`, size:`услуга`, per:1 });
+  specRows.push({ part:`Упаковка ${packaging.name}`, size:`—`, per:1 });
+
+  const stockNeeds = [
+    {cat:'profiles', idx:f.profileIdx, name:`Профиль «${profile.name}»`, need:perimeterM*wasteK*f.qty, unit:'м'},
+    {cat:'glass', idx:f.glassIdx, name:`Стекло «${glass.name}»`, need:glassAreaM2*f.qty, unit:'м²'},
+    {cat:'sealant', idx:null, name:'Уплотнитель (общий остаток)', need:perimeterM*wasteK*f.qty, unit:'м'},
+    {cat:'cornerKit', idx:system, name:`Угол+винты (${system})`, need:4*f.qty, unit:'компл.'},
+  ];
+  if(f.hingeMode==='install') stockNeeds.push({cat:'hinges', idx:f.hingeTypeIdx, name:`Петля «${hinge.name}»`, need:f.hingeCount*f.qty, unit:'шт'});
+  if(f.handleNeeded) stockNeeds.push({cat:'handles', idx:f.handleTypeIdx, name:`Ручка «${handle.name}»`, need:f.handleQty*f.qty, unit:'шт'});
+
+  return {profile,glass,hinge,handle,edge,packaging,system,glassW,glassH,glassAreaM2,perUnit,total,rows,specRows,stockNeeds};
+}
+
+function getStockFor(cat, idx){
+  if(cat==='profiles') return catalog.profiles[idx]?.stock||0;
+  if(cat==='glass') return catalog.glass[idx]?.stock||0;
+  if(cat==='hinges') return catalog.hinges[idx]?.stock||0;
+  if(cat==='handles') return catalog.handles[idx]?.stock||0;
+  if(cat==='sealant') return catalog.sealantStock||0;
+  if(cat==='cornerKit') return idx==='РШ' ? (catalog.cornerRSHStock||0) : (catalog.cornerRUStock||0);
+  return 0;
+}
+
+function drawDiagram(w,h,hingeMode,hingeCount){
+  const maxW = 150, maxH = 220;
+  const scale = Math.min(maxW/w, maxH/h);
+  const dw = w*scale, dh = h*scale;
+  const x0 = (maxW-dw)/2, y0 = 0;
+  let hinges = '';
+  if(hingeMode!=='none'){
+    for(let i=0;i<hingeCount;i++){
+      const yy = y0 + (dh/(hingeCount+1))*(i+1);
+      hinges += `<circle cx="${x0}" cy="${yy}" r="3" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`;
+    }
+  }
+  return `<svg width="180" height="250" viewBox="0 0 180 250" xmlns="http://www.w3.org/2000/svg">
+    <g transform="translate(${(180-dw)/2 - x0},8)">
+      <rect x="${x0}" y="${y0}" width="${dw}" height="${dh}" fill="var(--glass-soft)" stroke="var(--glass)" stroke-width="1.5"/>
+      <rect x="${x0}" y="${y0}" width="${dw}" height="${dh}" fill="none" stroke="var(--accent)" stroke-width="5"/>
+      ${hinges}
+      <text x="${x0+dw/2}" y="${dh+22}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">${Math.round(w)}×${Math.round(h)}</text>
+    </g>
+  </svg>`;
+}
+
+function calcAll(){
+  let grandTotal = 0;
+  let totalQty = 0;
+  let breakdownHtml = '';
+  let specHtml = '';
+  const stockAgg = {};
+
+  facades.forEach((f,i)=>{
+    const r = computeFacade(f);
+    grandTotal += r.total;
+    totalQty += f.qty;
+
+    breakdownHtml += `<div class="total-line" style="border-bottom:none;"><div class="name" style="font-weight:600;color:var(--ink);">Фасад ${i+1} · ${Math.round(f.width)}×${Math.round(f.height)} мм · ${f.qty} шт</div><div class="val">${fmt(r.total)}</div></div>`;
+    r.rows.forEach(row=>{
+      breakdownHtml += `<div class="total-line" style="padding:4px 0 4px 12px;"><div class="name">${row[0]}</div><div class="val">${fmt(row[1])}</div></div>`;
+    });
+    breakdownHtml += `<div style="height:8px;border-bottom:1px dashed var(--line);"></div>`;
+
+    const sideLine = (f.hingeMode!=='none')
+      ? `<tr><td colspan="4" style="font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);">Направление (ЛЕВЫЙ/ПРАВЫЙ): левых — ${f.leftQty}, правых — ${f.rightQty} ${f.sidesConfirmed ? '(подтверждено)' : '(⚠ не подтверждено)'}</td></tr>`
+      : '';
+    specHtml += `<tr><td colspan="4" style="background:var(--accent-soft);font-weight:600;">Фасад ${i+1} — ${Math.round(f.width)}×${Math.round(f.height)} мм, заказ ${f.qty} шт, система ${r.system}</td></tr>` + sideLine +
+      r.specRows.map(sr=>`<tr><td>${sr.part}</td><td>${sr.size}</td><td>${sr.per}</td><td>${sr.per*f.qty}</td></tr>`).join('');
+
+    r.stockNeeds.forEach(n=>{
+      const key = n.cat + ':' + (n.idx===null||n.idx===undefined ? 'x' : n.idx);
+      if(!stockAgg[key]) stockAgg[key] = {name:n.name, need:0, unit:n.unit, have:getStockFor(n.cat,n.idx)};
+      stockAgg[key].need += n.need;
+    });
+  });
+
+  document.getElementById('breakdown').innerHTML = breakdownHtml;
+  document.getElementById('grandTotal').textContent = fmt(grandTotal);
+  document.getElementById('perUnit').textContent = `${facades.length} ${plural(facades.length,'позиция','позиции','позиций')}, всего ${totalQty} ${plural(totalQty,'шт','шт','шт')}`;
+
+  document.getElementById('specTable').innerHTML = '<tr><th>Деталь</th><th>Размер, мм</th><th>Кол-во на 1</th><th>Кол-во на заказ</th></tr>' + specHtml;
+
+  renderStockTable(stockAgg);
+  renderDiagrams();
+}
+
+function plural(n, one, few, many){
+  n = Math.abs(n)%100;
+  const n1 = n%10;
+  if(n>10 && n<20) return many;
+  if(n1>1 && n1<5) return few;
+  if(n1===1) return one;
+  return many;
+}
+
+function renderStockTable(agg){
+  const keys = Object.keys(agg);
+  if(keys.length===0){
+    document.getElementById('stockTable').innerHTML = '<tr><th>Комплектующая</th><th>Нужно на заказ</th><th>В наличии</th><th>Статус</th></tr>';
+    document.getElementById('stockVerdict').innerHTML = '';
+    return;
+  }
+  let allOk = true;
+  const shortages = [];
+  const html = keys.map(k=>{
+    const r = agg[k];
+    const shortfall = Math.max(0, r.need-r.have);
+    const ok = shortfall <= 0.001;
+    if(!ok){ allOk = false; shortages.push(`${r.name}: докупить ${round2(shortfall)} ${r.unit}`); }
+    return `<tr><td>${r.name}</td><td>${round2(r.need)} ${r.unit}</td><td>${round2(r.have)} ${r.unit}</td><td class="${ok?'stock-ok':'stock-bad'}">${ok?'✓ хватает':`докупить ${round2(shortfall)} ${r.unit}`}</td></tr>`;
+  }).join('');
+  document.getElementById('stockTable').innerHTML = '<tr><th>Комплектующая</th><th>Нужно на заказ</th><th>В наличии</th><th>Статус</th></tr>' + html;
+  const verdict = document.getElementById('stockVerdict');
+  verdict.className = allOk ? 'verdict-ok' : 'verdict-bad';
+  verdict.innerHTML = allOk
+    ? '✓ Всё есть на складе — заказ можно собрать полностью из остатков.'
+    : '⚠ Не хватает на складе:<br>' + shortages.join('<br>');
+}
+
+function renderDiagrams(){
+  document.getElementById('diagramBox').innerHTML = facades.map((f,i)=>`
+    <div class="diagram-item">
+      <div class="diagram-label">Фасад ${i+1}</div>
+      ${drawDiagram(f.width,f.height,f.hingeMode,f.hingeCount)}
+    </div>`).join('');
+}
+
+document.getElementById('copySpecBtn').addEventListener('click', ()=>{
+  let text = `Спецификация заказа — ${facades.length} ${plural(facades.length,'позиция','позиции','позиций')}\n\n`;
+  facades.forEach((f,i)=>{
+    const r = computeFacade(f);
+    text += `Фасад ${i+1}: ${Math.round(f.width)}×${Math.round(f.height)} мм, заказ ${f.qty} шт, система ${r.system}\n`;
+    if(f.hingeMode!=='none') text += `Направление: левых — ${f.leftQty}, правых — ${f.rightQty} ${f.sidesConfirmed?'(подтверждено)':'(НЕ ПОДТВЕРЖДЕНО)'}\n`;
+    text += 'Деталь\tРазмер, мм\tКол-во/1\tКол-во на заказ\n';
+    r.specRows.forEach(sr=> text += `${sr.part}\t${sr.size}\t${sr.per}\t${sr.per*f.qty}\n`);
+    text += '\n';
+  });
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = document.getElementById('copySpecBtn');
+    const old = btn.textContent;
+    btn.textContent = '✓ Скопировано';
+    setTimeout(()=>btn.textContent=old, 1500);
+  });
+});
+
+loadCatalog();
+</script>
 </body>
 </html>
